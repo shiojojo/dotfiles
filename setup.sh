@@ -38,6 +38,16 @@ fi
 # ---------------------------------------------------------
 # 3. Git 設定の適用 (シンボリックリンク)
 # ---------------------------------------------------------
+if [ ! -f "$DOTFILES_DIR/git/.gitconfig" ]; then
+    echo "❌ $DOTFILES_DIR/git/.gitconfig が存在しません。"
+    exit 1
+fi
+
+if [ ! -f "$DOTFILES_DIR/git/.gitignore_global" ]; then
+    echo "❌ $DOTFILES_DIR/git/.gitignore_global が存在しません。"
+    exit 1
+fi
+
 ln -snf "$DOTFILES_DIR/git/.gitconfig" "$HOME/.gitconfig"
 ln -snf "$DOTFILES_DIR/git/.gitignore_global" "$HOME/.gitignore_global"
 echo "✅ Git: .gitconfig と .gitignore_global のリンクを作成しました。"

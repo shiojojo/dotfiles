@@ -28,6 +28,24 @@ check() {
     fi
 }
 
+git_check() {
+    local label="$1"
+    local key="$2"
+    local expected="$3"
+    local actual
+    actual="$(git config --global --get "$key" 2>/dev/null || echo "")"
+
+    if [ "$actual" = "$expected" ]; then
+        echo "  ✅ $label"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ $label"
+        echo "       期待値: '$expected'"
+        echo "       実際値: '$actual'"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
 echo "🔍 ハーネス設定の監査（ヘルスチェック）を開始します..."
 echo "========================================================="
 
@@ -56,9 +74,20 @@ echo "[2] uv セキュリティ設定"
 if command -v uv >/dev/null 2>&1; then
     UV_TOML="$HOME/.config/uv/uv.toml"
 
-    # uv には config get コマンドがないため toml ファイルを直接パースする
+    # awk を用いた堅牢なパース (スペース/クォート揺れに対応)
     uv_get() {
-        grep "^$1" "$UV_TOML" 2>/dev/null | sed 's/.*= *//' | tr -d '"'
+        local target_key="$1"
+        awk -F'=' -v key="$target_key" '
+            {
+                k=$1; gsub(/^[ \t]+|[ \t]+$/, "", k)
+                if (k == key) {
+                    v=$2; 
+                    gsub(/^[ \t]+|[ \t]+$/, "", v); 
+                    gsub(/["'"'"']/, "", v); 
+                    print v
+                }
+            }
+        ' "$UV_TOML"
     }
 
     uv_check() {
@@ -87,8 +116,8 @@ if command -v uv >/dev/null 2>&1; then
         FAIL=$((FAIL + 1))
     fi
 
-    uv_check "exclude-newer=\"7 days\" (7日検疫)"  exclude-newer  "7 days"
-    uv_check "index url = pypi.org (公式レジストリ固定)" url "https://pypi.org/simple"
+    uv_check "exclude-newer (7日検疫)"  exclude-newer  "7 days"
+    uv_check "url (公式レジストリ固定)"  url             "https://pypi.org/simple"
 
     # pip 禁止チェック（PIP_REQUIRE_VIRTUALENV が設定されているか）
     if [ "$PIP_REQUIRE_VIRTUALENV" = "true" ]; then
@@ -108,14 +137,36 @@ echo "---------------------------------------------------------"
 # ---------------------------------------------------------
 echo "[3] Git グローバル設定"
 if command -v git >/dev/null 2>&1; then
-    EXCLUDES=$(git config --global core.excludesfile || echo "")
-    if echo "$EXCLUDES" | grep -q ".gitignore_global"; then
+    if [ -L "$HOME/.gitconfig" ]; then
+        echo "  ✅ ~/.gitconfig はシンボリックリンクです ($(readlink "$HOME/.gitconfig"))"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ ~/.gitconfig がシンボリックリンクではありません"
+        FAIL=$((FAIL + 1))
+    fi
+
+    if [ -L "$HOME/.gitignore_global" ]; then
+        echo "  ✅ ~/.gitignore_global はシンボリックリンクです ($(readlink "$HOME/.gitignore_global"))"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ ~/.gitignore_global がシンボリックリンクではありません"
+        FAIL=$((FAIL + 1))
+    fi
+
+    EXCLUDES="$(git config --global --get core.excludesfile || echo "")"
+    if [ "$EXCLUDES" = "$HOME/.gitignore_global" ] || [ "$EXCLUDES" = "~/.gitignore_global" ]; then
         echo "  ✅ core.excludesfile ($EXCLUDES)"
         PASS=$((PASS + 1))
     else
-        echo "  ❌ core.excludesfile (.gitignore_global が設定されていません)"
+        echo "  ❌ core.excludesfile (~/.gitignore_global が設定されていません)"
         FAIL=$((FAIL + 1))
     fi
+
+    # Security-critical Git checks
+    git_check "fetch.fsckObjects=true"         fetch.fsckObjects      "true"
+    git_check "transfer.fsckObjects=true"      transfer.fsckObjects   "true"
+    git_check "protocol.file.allow=never"      protocol.file.allow    "never"
+    git_check "http.sslVerify=true"            http.sslVerify         "true"
 else
     echo "  ⚠️ Git がインストールされていません。"
 fi

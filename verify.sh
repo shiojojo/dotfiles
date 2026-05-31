@@ -173,9 +173,94 @@ fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
-# 4. Zsh 設定チェック
+# 4. VS Code セキュリティ設定
 # ---------------------------------------------------------
-echo "[4] シェル環境"
+echo "[4] VS Code 環境"
+VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json"
+
+if [ -f "$VSCODE_SETTINGS" ]; then
+    VSCODE_JSON_VALID=0
+    if command -v jq >/dev/null 2>&1 && jq empty "$VSCODE_SETTINGS" >/dev/null 2>&1; then
+        VSCODE_JSON_VALID=1
+    fi
+
+    vsc_check_bool() {
+        local label="$1"
+        local key="$2"
+        local expected="$3"
+        local regex="$4"
+        local actual
+
+        if [ "$VSCODE_JSON_VALID" -eq 1 ]; then
+            actual="$(jq -r ".[\"$key\"] // \"未設定\"" "$VSCODE_SETTINGS" 2>/dev/null || echo "未設定")"
+            if [ "$actual" = "$expected" ]; then
+                echo "  ✅ $label"
+                PASS=$((PASS + 1))
+            else
+                echo "  ❌ $label"
+                echo "       期待値: '$expected'"
+                echo "       実際値: '$actual'"
+                FAIL=$((FAIL + 1))
+            fi
+        else
+            if grep -Eq "$regex" "$VSCODE_SETTINGS"; then
+                echo "  ✅ $label"
+                PASS=$((PASS + 1))
+            else
+                echo "  ❌ $label"
+                FAIL=$((FAIL + 1))
+            fi
+        fi
+    }
+
+    vsc_check_string() {
+        local label="$1"
+        local key="$2"
+        local expected="$3"
+        local regex="$4"
+        local actual
+
+        if [ "$VSCODE_JSON_VALID" -eq 1 ]; then
+            actual="$(jq -r ".[\"$key\"] // \"未設定\"" "$VSCODE_SETTINGS" 2>/dev/null || echo "未設定")"
+            if [ "$actual" = "$expected" ]; then
+                echo "  ✅ $label"
+                PASS=$((PASS + 1))
+            else
+                echo "  ❌ $label"
+                echo "       期待値: '$expected'"
+                echo "       実際値: '$actual'"
+                FAIL=$((FAIL + 1))
+            fi
+        else
+            if grep -Eq "$regex" "$VSCODE_SETTINGS"; then
+                echo "  ✅ $label"
+                PASS=$((PASS + 1))
+            else
+                echo "  ❌ $label"
+                FAIL=$((FAIL + 1))
+            fi
+        fi
+    }
+
+    vsc_check_bool "extensions.autoUpdate=false (時間差検疫の土台)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
+    vsc_check_bool "extensions.autoCheckUpdates=true (通知のみ許可)" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
+    vsc_check_bool "security.workspace.trust.enabled=true" "security.workspace.trust.enabled" "true" '"security\.workspace\.trust\.enabled"[[:space:]]*:[[:space:]]*true'
+    vsc_check_bool "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
+    vsc_check_string "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
+    vsc_check_string "update.mode=manual" "update.mode" "manual" '"update\.mode"[[:space:]]*:[[:space:]]*"manual"'
+    vsc_check_bool "extensions.supportUntrustedWorkspaces=false" "extensions.supportUntrustedWorkspaces" "false" '"extensions\.supportUntrustedWorkspaces"[[:space:]]*:[[:space:]]*false'
+    vsc_check_string "telemetry.telemetryLevel=off" "telemetry.telemetryLevel" "off" '"telemetry\.telemetryLevel"[[:space:]]*:[[:space:]]*"off"'
+    vsc_check_bool "workbench.enableExperiments=false" "workbench.enableExperiments" "false" '"workbench\.enableExperiments"[[:space:]]*:[[:space:]]*false'
+else
+    echo "  ❌ VS Code の settings.json が見つかりません"
+    FAIL=$((FAIL + 1))
+fi
+echo "---------------------------------------------------------"
+
+# ---------------------------------------------------------
+# 5. Zsh 設定チェック
+# ---------------------------------------------------------
+echo "[5] シェル環境"
 ZSHRC_FILE="$HOME/.zshrc"
 if [ -f "$ZSHRC_FILE" ] && grep -qF "# === Dotfiles Harness Settings ===" "$ZSHRC_FILE"; then
     echo "  ✅ ~/.zshrc にハーネス設定の読み込みが存在します"

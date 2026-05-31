@@ -14,6 +14,8 @@ dotfiles/
 │   └── .gitignore_global
 ├── pnpm/
 │   └── config
+├── vscode/
+│   └── settings.json
 ├── shell/
 │   └── security-python.zsh
 ├── uv/
@@ -48,6 +50,19 @@ dotfiles/
 - `protocol.file.allow=never`
 - `http.sslVerify=true`
 
+### VS Code (時間差検疫)
+
+- VS Code 設定は dotfiles で上書きしない
+- `vscode/settings.json` は「コピペ用テンプレート」として管理する
+- ユーザー設定に手動反映した内容を verify.sh で厳格監査する
+
+## アップデート運用方針 (VS Code)
+
+- 更新作業は週1回のメンテ枠でのみ実施する。
+- 通知が出ても最低 3〜7 日は更新しない（時間差検疫）。
+- 重大インシデント速報が出た拡張は更新せず、Marketplace の取り下げ確認後に再評価する。
+- 例外的に即時更新した場合は、理由をこの README に記録する。
+
 ## setup.sh の現在動作
 
 1. pnpm 設定をグローバル設定ファイルへリンク
@@ -60,9 +75,29 @@ dotfiles/
 
 1. pnpm セキュリティ設定値
 2. uv 設定リンクと設定値
-3. Git リンク状態
-4. Git セキュリティ必須値
+3. Git リンク状態とセキュリティ必須値
+4. VS Code の必須セキュリティ9項目監査
 5. `.zshrc` 読み込みマーカー
+
+## VS Code の手動設定
+
+1. VS Code で Settings(JSON) を開く
+2. [vscode/settings.json](vscode/settings.json) の内容を必要項目として反映する
+3. `./verify.sh` を実行し、VS Code 項目がすべて ✅ になることを確認する
+
+```json
+{
+  "extensions.autoUpdate": false,
+  "extensions.autoCheckUpdates": true,
+  "security.workspace.trust.enabled": true,
+  "security.workspace.trust.emptyWindow": false,
+  "security.workspace.trust.untrustedFiles": "prompt",
+  "update.mode": "manual",
+  "extensions.supportUntrustedWorkspaces": false,
+  "telemetry.telemetryLevel": "off",
+  "workbench.enableExperiments": false
+}
+```
 
 ## 無駄な処理の確認結果
 

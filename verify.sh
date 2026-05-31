@@ -50,9 +50,63 @@ fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
-# 2. Git の設定チェック
+# 2. uv セキュリティ設定
 # ---------------------------------------------------------
-echo "[2] Git グローバル設定"
+echo "[2] uv セキュリティ設定"
+if command -v uv >/dev/null 2>&1; then
+    UV_TOML="$HOME/.config/uv/uv.toml"
+
+    # uv には config get コマンドがないため toml ファイルを直接パースする
+    uv_get() {
+        grep "^$1" "$UV_TOML" 2>/dev/null | sed 's/.*= *//' | tr -d '"'
+    }
+
+    uv_check() {
+        local label="$1"
+        local key="$2"
+        local expected="$3"
+        local actual
+        actual="$(uv_get "$key")"
+        if [ "$actual" = "$expected" ]; then
+            echo "  ✅ $label"
+            PASS=$((PASS + 1))
+        else
+            echo "  ❌ $label"
+            echo "       期待値: '$expected'"
+            echo "       実際値: '$actual'"
+            FAIL=$((FAIL + 1))
+        fi
+    }
+
+    # 設定ファイルがシンボリックリンクかチェック
+    if [ -L "$UV_TOML" ]; then
+        echo "  ✅ uv.toml はシンボリックリンクです ($(readlink "$UV_TOML"))"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ uv.toml がシンボリックリンクではありません（dotfiles 管理外）"
+        FAIL=$((FAIL + 1))
+    fi
+
+    uv_check "exclude-newer=\"7 days\" (7日検疫)"  exclude-newer  "7 days"
+    uv_check "index url = pypi.org (公式レジストリ固定)" url "https://pypi.org/simple"
+
+    # pip 禁止チェック（PIP_REQUIRE_VIRTUALENV が設定されているか）
+    if [ "$PIP_REQUIRE_VIRTUALENV" = "true" ]; then
+        echo "  ✅ PIP_REQUIRE_VIRTUALENV=true (仮想環境外インストール禁止)"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ PIP_REQUIRE_VIRTUALENV が設定されていません"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "  ⚠️ uv がインストールされていないか、パスが通っていません。"
+fi
+echo "---------------------------------------------------------"
+
+# ---------------------------------------------------------
+# 3. Git の設定チェック
+# ---------------------------------------------------------
+echo "[3] Git グローバル設定"
 if command -v git >/dev/null 2>&1; then
     EXCLUDES=$(git config --global core.excludesfile || echo "")
     if echo "$EXCLUDES" | grep -q ".gitignore_global"; then
@@ -68,15 +122,15 @@ fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
-# 3. Zsh 設定チェック
+# 4. Zsh 設定チェック
 # ---------------------------------------------------------
-echo "[3] シェル環境"
+echo "[4] シェル環境"
 ZSHRC_FILE="$HOME/.zshrc"
-if [ -f "$ZSHRC_FILE" ] && grep -qF "source $HOME/dotfiles/shell/harness.zsh" "$ZSHRC_FILE"; then
-    echo "  ✅ ~/.zshrc に harness.zsh の読み込みが存在します"
+if [ -f "$ZSHRC_FILE" ] && grep -qF "# === Dotfiles Harness Settings ===" "$ZSHRC_FILE"; then
+    echo "  ✅ ~/.zshrc にハーネス設定の読み込みが存在します"
     PASS=$((PASS + 1))
 else
-    echo "  ❌ ~/.zshrc から harness.zsh が読み込まれていません"
+    echo "  ❌ ~/.zshrc からハーネス設定が読み込まれていません"
     FAIL=$((FAIL + 1))
 fi
 echo "========================================================="

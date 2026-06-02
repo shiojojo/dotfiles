@@ -14,7 +14,6 @@
   "security.workspace.trust.emptyWindow": false,
   // 未信頼ファイルを開くときは必ず確認を求める
   "security.workspace.trust.untrustedFiles": "prompt",
-  "extensions.supportUntrustedWorkspaces": false,
 
   // 3. VS Code 本体更新の手動化（時間差検疫）
   "update.mode": "manual",

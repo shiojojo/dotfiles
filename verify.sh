@@ -176,7 +176,11 @@ echo "---------------------------------------------------------"
 # 4. VS Code セキュリティ設定
 # ---------------------------------------------------------
 echo "[4] VS Code 環境"
-VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json"
+case "$(uname -s)" in
+  Darwin) VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json" ;;
+  Linux)  VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json" ;;
+  *)      VSCODE_SETTINGS="" ;;
+esac
 
 if [ -f "$VSCODE_SETTINGS" ]; then
     VSCODE_JSON_VALID=0
@@ -248,7 +252,6 @@ if [ -f "$VSCODE_SETTINGS" ]; then
     vsc_check_bool "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
     vsc_check_string "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
     vsc_check_string "update.mode=manual" "update.mode" "manual" '"update\.mode"[[:space:]]*:[[:space:]]*"manual"'
-    vsc_check_bool "extensions.supportUntrustedWorkspaces=false" "extensions.supportUntrustedWorkspaces" "false" '"extensions\.supportUntrustedWorkspaces"[[:space:]]*:[[:space:]]*false'
     vsc_check_string "telemetry.telemetryLevel=off" "telemetry.telemetryLevel" "off" '"telemetry\.telemetryLevel"[[:space:]]*:[[:space:]]*"off"'
     vsc_check_bool "workbench.enableExperiments=false" "workbench.enableExperiments" "false" '"workbench\.enableExperiments"[[:space:]]*:[[:space:]]*false'
 else
@@ -258,16 +261,55 @@ fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
-# 5. Zsh 設定チェック
+# 5. シェル環境チェック
 # ---------------------------------------------------------
 echo "[5] シェル環境"
-ZSHRC_FILE="$HOME/.zshrc"
-if [ -f "$ZSHRC_FILE" ] && grep -qF "# === Dotfiles Harness Settings ===" "$ZSHRC_FILE"; then
-    echo "  ✅ ~/.zshrc にハーネス設定の読み込みが存在します"
+case "$(uname -s)" in
+  Darwin) RC_FILE="$HOME/.zshrc" ;;
+  Linux)  RC_FILE="$HOME/.bashrc" ;;
+  *)      RC_FILE="" ;;
+esac
+
+if [ -n "$RC_FILE" ] && [ -f "$RC_FILE" ] && grep -qF "# === Dotfiles Harness Settings ===" "$RC_FILE"; then
+    echo "  ✅ $RC_FILE にハーネス設定の読み込みが存在します"
     PASS=$((PASS + 1))
 else
-    echo "  ❌ ~/.zshrc からハーネス設定が読み込まれていません"
+    echo "  ❌ $RC_FILE からハーネス設定が読み込まれていません"
     FAIL=$((FAIL + 1))
+fi
+echo "---------------------------------------------------------"
+
+# ---------------------------------------------------------
+# 6. Homebrew セキュリティ設定 (macOS のみ)
+# ---------------------------------------------------------
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "[6] Homebrew セキュリティ設定"
+    if command -v brew >/dev/null 2>&1; then
+        brew_check() {
+            local label="$1"
+            local var="$2"
+            local expected="$3"
+            local actual
+            actual="$(eval echo \"\$$var\")"
+            if [ "$actual" = "$expected" ]; then
+                echo "  ✅ $label"
+                PASS=$((PASS + 1))
+            else
+                echo "  ❌ $label"
+                echo "       期待値: '$expected'"
+                echo "       実際値: '$actual'"
+                FAIL=$((FAIL + 1))
+            fi
+        }
+
+        brew_check "HOMEBREW_NO_AUTO_UPDATE=1 (自動更新禁止)"     HOMEBREW_NO_AUTO_UPDATE     "1"
+        brew_check "HOMEBREW_NO_INSECURE_REDIRECT=1 (MITM対策)"   HOMEBREW_NO_INSECURE_REDIRECT "1"
+        brew_check "HOMEBREW_NO_ANALYTICS=1 (テレメトリ無効)"     HOMEBREW_NO_ANALYTICS       "1"
+        brew_check "HOMEBREW_CASK_OPTS=--require-sha (SHA必須)"   HOMEBREW_CASK_OPTS          "--require-sha"
+    else
+        echo "  ⚠️ Homebrew がインストールされていません。"
+    fi
+    echo "---------------------------------------------------------"
 fi
 echo "========================================================="
 echo "結果: ✅ $PASS 件成功 / ❌ $FAIL 件失敗"

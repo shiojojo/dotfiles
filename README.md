@@ -17,7 +17,9 @@ dotfiles/
 ├── vscode/
 │   └── settings.json
 ├── shell/
-│   └── security-python.zsh
+│   ├── sec-python.sh
+│   ├── sec-node.sh
+│   └── os-mac.sh
 ├── uv/
 │   └── uv.toml
 ├── setup.sh
@@ -35,12 +37,15 @@ dotfiles/
 - 新規公開パッケージ検疫 (7日)
 - trust policy no-downgrade
 - postinstall 全拒否
+- `npm` / `npx` / `pnpx` / `pnpm dlx` の直接実行ブロック
 
 ### uv / Python
 
 - 新規公開パッケージ検疫 (7日)
 - index を PyPI 公式へ固定
-- pip の直接利用抑止 (`PIP_REQUIRE_VIRTUALENV=true` + shell 関数)
+- `pip` / `pip3` の全面無効化 (`PIP_REQUIRE_VIRTUALENV=true` + shell 関数)
+- `uvx` / `uv tool run` の直接実行ブロック
+- `UV_SYSTEM_PYTHON=false` (システム Python 書き換え禁止)
 
 ### Git (セキュリティ必須のみ)
 
@@ -56,6 +61,13 @@ dotfiles/
 - `vscode/settings.json` は「コピペ用テンプレート」として管理する
 - ユーザー設定に手動反映した内容を verify.sh で厳格監査する
 
+### Homebrew / macOS (os-mac.sh)
+
+- `HOMEBREW_NO_AUTO_UPDATE=1` (自動更新禁止)
+- `HOMEBREW_CASK_OPTS=--require-sha` (SHA チェックサム必須)
+- `HOMEBREW_NO_INSECURE_REDIRECT=1` (MITM 対策)
+- `HOMEBREW_NO_ANALYTICS=1` (テレメトリ無効化)
+
 ## アップデート運用方針 (VS Code)
 
 - 更新作業は週1回のメンテ枠でのみ実施する。
@@ -69,15 +81,28 @@ dotfiles/
 2. uv 設定を `~/.config/uv/uv.toml` へリンク
 3. Git 設定ファイルの存在確認
 4. `.gitconfig` と `.gitignore_global` をホームへリンク
-5. `.zshrc` に shell 設定の読み込みを追記 (未設定時のみ)
+5. OS を自動判定し、RC ファイル (`.zshrc` / `.bashrc`) に以下を追記 (未設定時のみ)
+   - `sec-*.sh` を一括 source するループ
+   - `os-mac.sh` / `os-linux.sh` を OS に応じて source
 
 ## verify.sh の現在検証項目
 
 1. pnpm セキュリティ設定値
-2. uv 設定リンクと設定値
+2. uv 設定リンクと設定値・PIP_REQUIRE_VIRTUALENV
 3. Git リンク状態とセキュリティ必須値
-4. VS Code の必須セキュリティ9項目監査
-5. `.zshrc` 読み込みマーカー
+4. VS Code の必須セキュリティ項目監査 (jq / grep フォールバック対応)
+5. シェル環境の読み込みマーカー (OS 判定対応)
+6. Homebrew セキュリティ設定値 (macOS のみ)
+
+## verify.sh 実行前の注意
+
+`setup.sh` 実行直後は環境変数がまだ反映されていないため、必ずシェルを再読み込みしてから実行すること。
+
+```sh
+source ~/.zshrc   # Mac
+source ~/.bashrc  # Linux
+./verify.sh
+```
 
 ## VS Code の手動設定
 
@@ -93,7 +118,6 @@ dotfiles/
   "security.workspace.trust.emptyWindow": false,
   "security.workspace.trust.untrustedFiles": "prompt",
   "update.mode": "manual",
-  "extensions.supportUntrustedWorkspaces": false,
   "telemetry.telemetryLevel": "off",
   "workbench.enableExperiments": false
 }
@@ -107,17 +131,13 @@ dotfiles/
 ## 今後追加すべきもの (提案)
 
 1. verify の「必須/任意」モード分離
+   - `./verify.sh --strict` を追加し、CI とローカル確認で厳しさを切り替える。
 
-- `./verify.sh --strict` を追加し、CI とローカル確認で厳しさを切り替える。
+2. 監査ログの最小出力
+   - verify 結果を `./verify.sh --summary` で 1 行出力できるようにし、運用確認を簡素化する。
 
-2. shell のダウンロード実行ガード
+3. 例外設定の明文化
+   - プロジェクト側で検疫や build 制限を緩和する際、理由を README に記録する運用ルールを追加する。
 
-- `curl ... | sh` のような直実行を避ける運用ルールを shell ファイルで明示する。
-
-3. 監査ログの最小出力
-
-- verify 結果を `./verify.sh --summary` で 1 行出力できるようにし、運用確認を簡素化する。
-
-4. 例外設定の明文化
-
-- プロジェクト側で検疫や build 制限を緩和する際、理由を README に記録する運用ルールを追加する。
+4. Linux 固有設定の追加
+   - `os-linux.sh` を作成し、Linux 環境固有のセキュリティ設定を追加する。

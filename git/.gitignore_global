@@ -1,1 +1,26 @@
-# Global ignore patterns
+# ============================================================
+# グローバル Git 除外設定 (Harness Engineering)
+# ============================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# エディタ
+*.swp
+*.swo
+
+# 環境変数・秘密情報 (Harness Guard)
+# APIキー・パスワード等の誤 commit を防ぐ
+.env
+.env.local
+.env*.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node.js
+node_modules/

@@ -4,7 +4,9 @@
 # ============================================================
 set -e
 
+# --- 修正点: 自身のディレクトリパスを確実に取得する ---
 DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "🔗 ハーネス設定のセットアップを開始します..."
 echo "📂 検出された Dotfiles ディレクトリ: $DOTFILES_DIR"
 
@@ -12,7 +14,6 @@ echo "📂 検出された Dotfiles ディレクトリ: $DOTFILES_DIR"
 # 1. pnpm 設定の適用 (pnpm から動的にパスを取得)
 # ---------------------------------------------------------
 if command -v pnpm >/dev/null 2>&1; then
-    # pnpm が実際に使っている globalconfig のパスを特定
     PNPM_GLOBAL_RC="$(pnpm config get globalconfig)"
     PNPM_CONFIG_DIR="$(dirname "$PNPM_GLOBAL_RC")"
     
@@ -53,21 +54,40 @@ ln -snf "$DOTFILES_DIR/git/.gitignore_global" "$HOME/.gitignore_global"
 echo "✅ Git: .gitconfig と .gitignore_global のリンクを作成しました。"
 
 # ---------------------------------------------------------
-# 4. シェル環境 (zsh) 設定の適用
+# 4. シェル環境設定の適用
 # ---------------------------------------------------------
-ZSHRC_FILE="$HOME/.zshrc"
-SOURCE_MARKER="# === Dotfiles Harness Settings ==="
-SOURCE_CMD="for f in $DOTFILES_DIR/shell/*.zsh; do source \"\$f\"; done"
-
-touch "$ZSHRC_FILE"
-
-if grep -qF "$SOURCE_MARKER" "$ZSHRC_FILE"; then
-    echo "✅ zsh: ~/.zshrc には既にハーネス設定の読み込みが存在します。"
+OS_TYPE="$(uname -s)"
+if [ "$OS_TYPE" = "Darwin" ]; then
+    RC_FILE="$HOME/.zshrc"
+    OS_PREFIX="mac"
+elif [ "$OS_TYPE" = "Linux" ]; then
+    RC_FILE="$HOME/.bashrc"
+    OS_PREFIX="linux"
 else
-    echo ""               >> "$ZSHRC_FILE"
-    echo "$SOURCE_MARKER" >> "$ZSHRC_FILE"
-    echo "$SOURCE_CMD"    >> "$ZSHRC_FILE"
-    echo "✅ zsh: ~/.zshrc にハーネス設定の読み込みを追記しました。"
+    echo "⚠️ サポートされていないOSです: $OS_TYPE"
+    exit 1
+fi
+
+SOURCE_MARKER="# === Dotfiles Harness Settings ==="
+
+touch "$RC_FILE"
+
+if grep -qF "$SOURCE_MARKER" "$RC_FILE"; then
+    echo "✅ OS($OS_TYPE): $RC_FILE には既にハーネス設定が存在します。"
+else
+    echo "" >> "$RC_FILE"
+    echo "$SOURCE_MARKER" >> "$RC_FILE"
+    
+    # 共通セキュリティルール (sec-*.sh) の一括読み込み
+    echo "for f in \"$DOTFILES_DIR\"/shell/sec-*.sh; do" >> "$RC_FILE"
+    echo "    [ -f \"\$f\" ] && source \"\$f\"" >> "$RC_FILE"
+    echo "done" >> "$RC_FILE"
+    
+    # OS固有ルールの読み込み
+    echo "OS_FILE=\"$DOTFILES_DIR/shell/os-${OS_PREFIX}.sh\"" >> "$RC_FILE"
+    echo "[ -f \"\$OS_FILE\" ] && source \"\$OS_FILE\"" >> "$RC_FILE"
+    
+    echo "✅ OS($OS_TYPE): $RC_FILE に動的読み込み処理を追記しました。"
 fi
 
 echo ""

@@ -280,6 +280,14 @@ else
     echo "  ❌ $RC_FILE からハーネス設定が読み込まれていません"
     FAIL=$((FAIL + 1))
 fi
+
+if echo "$PATH" | tr ':' '\n' | grep -qF "$DOTFILES_DIR/bin"; then
+    echo "  ✅ dotfiles/bin が PATH に含まれています"
+    PASS=$((PASS + 1))
+else
+    echo "  ❌ dotfiles/bin が PATH に含まれていません（setup.sh を実行してください）"
+    FAIL=$((FAIL + 1))
+fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------

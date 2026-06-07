@@ -1,0 +1,15 @@
+# ============================================================
+# dotfiles リポジトリの除外設定
+# ============================================================
+
+# setup.sh が生成する bin/ の symlink は git 管理しない
+# 実体スクリプト (harness-guard / pnpm / uv) はコミット対象
+bin/npm
+bin/npx
+bin/pip
+bin/pip3
+bin/uvx
+bin/pnpx
+
+# macOS
+.DS_Store

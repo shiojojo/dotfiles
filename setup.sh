@@ -54,7 +54,18 @@ ln -snf "$DOTFILES_DIR/git/.gitignore_global" "$HOME/.gitignore_global"
 echo "✅ Git: .gitconfig と .gitignore_global のリンクを作成しました。"
 
 # ---------------------------------------------------------
-# 4. シェル環境設定の適用
+# 4. bin/ シムのセットアップ
+# ---------------------------------------------------------
+SHIM_DIR="$DOTFILES_DIR/bin"
+chmod +x "$SHIM_DIR/harness-guard" "$SHIM_DIR/pnpm" "$SHIM_DIR/uv"
+
+for cmd in npm npx pip pip3 uvx pnpx; do
+    ln -snf harness-guard "$SHIM_DIR/$cmd"
+done
+echo "✅ bin/: シムのリンクを作成しました。"
+
+# ---------------------------------------------------------
+# 5. シェル環境設定の適用
 # ---------------------------------------------------------
 OS_TYPE="$(uname -s)"
 if [ "$OS_TYPE" = "Darwin" ]; then
@@ -77,6 +88,9 @@ if grep -qF "$SOURCE_MARKER" "$RC_FILE"; then
 else
     echo "" >> "$RC_FILE"
     echo "$SOURCE_MARKER" >> "$RC_FILE"
+    
+    # AIガード用 PATH ラッパー (bin/) を優先適用
+    echo "export PATH=\"$DOTFILES_DIR/bin:\$PATH\"" >> "$RC_FILE"
     
     # 共通セキュリティルール (sec-*.sh) の一括読み込み
     echo "for f in \"$DOTFILES_DIR\"/shell/sec-*.sh; do" >> "$RC_FILE"

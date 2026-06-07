@@ -4,11 +4,16 @@
 
 - 生成AIが実行するスクリプトや依存解決を前提に、端末のデフォルトをセキュアにする。
 - 個人情報を含む設定を分離し、共有設定は機械的に再現できる内容だけにする。
+- **PATHレベルでのラッパー (Shim) を用いて、人間・AI問わず危険なコマンド実行を根本からブロックする。**
 
 ## 現在の構成
 
-```
+```text
 dotfiles/
+├── bin/                       ← AI・人間共通のコマンド実行ガード (Shim)
+│   ├── harness-guard          (絶対ブロック共通スクリプト)
+│   ├── pnpm, uv               (一部サブコマンドのみブロック＋パススルー)
+│   └── npm, npx, pip, pip3, uvx, pnpx (harness-guardへのsymlink)
 ├── git/
 │   ├── .gitconfig
 │   └── .gitignore_global
@@ -16,10 +21,9 @@ dotfiles/
 │   └── config
 ├── vscode/
 │   └── settings.json
-├── shell/
-│   ├── sec-python.sh
-│   ├── sec-node.sh
-│   └── os-mac.sh
+├── shell/                     ← 環境変数・エイリアス定義
+│   ├── sec-python.sh          (PIP_REQUIRE_VIRTUALENV等)
+│   └── os-mac.sh              (macOS固有設定)
 ├── uv/
 │   └── uv.toml
 ├── setup.sh
@@ -37,14 +41,14 @@ dotfiles/
 - 新規公開パッケージ検疫 (7日)
 - trust policy no-downgrade
 - postinstall 全拒否
-- `npm` / `npx` / `pnpx` / `pnpm dlx` の直接実行ブロック
+- **`npm` / `npx` / `pnpx` / `pnpm dlx` の直接実行を PATH ラッパーで完全ブロック**
 
 ### uv / Python
 
 - 新規公開パッケージ検疫 (7日)
 - index を PyPI 公式へ固定
-- `pip` / `pip3` の全面無効化 (`PIP_REQUIRE_VIRTUALENV=true` + shell 関数)
-- `uvx` / `uv tool run` の直接実行ブロック
+- **`pip` / `pip3` / `uvx` / `uv tool run` の直接実行を PATH ラッパーで完全ブロック**
+- `PIP_REQUIRE_VIRTUALENV=true` (グローバルへの pip インストール禁止)
 - `UV_SYSTEM_PYTHON=false` (システム Python 書き換え禁止)
 
 ### Git (セキュリティ必須のみ)
@@ -79,10 +83,11 @@ dotfiles/
 
 1. pnpm 設定をグローバル設定ファイルへリンク
 2. uv 設定を `~/.config/uv/uv.toml` へリンク
-3. Git 設定ファイルの存在確認
-4. `.gitconfig` と `.gitignore_global` をホームへリンク
+3. Git 設定ファイルの存在確認とホームへのリンク作成
+4. `bin/` 配下のシムスクリプト群への実行権限付与と、共通ガードへのシンボリックリンク生成
 5. OS を自動判定し、RC ファイル (`.zshrc` / `.bashrc`) に以下を追記 (未設定時のみ)
-   - `sec-*.sh` を一括 source するループ
+   - **`export PATH="$DOTFILES_DIR/bin:$PATH"` (ガードの最優先適用)**
+   - `sec-*.sh` を一括 source するループ (環境変数の適用)
    - `os-mac.sh` / `os-linux.sh` を OS に応じて source
 
 ## verify.sh の現在検証項目
@@ -91,7 +96,7 @@ dotfiles/
 2. uv 設定リンクと設定値・PIP_REQUIRE_VIRTUALENV
 3. Git リンク状態とセキュリティ必須値
 4. VS Code の必須セキュリティ項目監査 (jq / grep フォールバック対応)
-5. シェル環境の読み込みマーカー (OS 判定対応)
+5. **PATH ラッパー (`bin/`) が正しく最優先で適用されているかの監査**
 6. Homebrew セキュリティ設定値 (macOS のみ)
 
 ## verify.sh 実行前の注意
@@ -123,21 +128,13 @@ source ~/.bashrc  # Linux
 }
 ```
 
-## 無駄な処理の確認結果
-
-- setup.sh / verify.sh に、現在の基本方針と矛盾する処理はなし。
-- 過去の拡張でできた空ディレクトリ (`git/hooks`, `.github/workflows`) は削除済み。
-
 ## 今後追加すべきもの (提案)
 
 1. verify の「必須/任意」モード分離
    - `./verify.sh --strict` を追加し、CI とローカル確認で厳しさを切り替える。
-
 2. 監査ログの最小出力
    - verify 結果を `./verify.sh --summary` で 1 行出力できるようにし、運用確認を簡素化する。
-
 3. 例外設定の明文化
    - プロジェクト側で検疫や build 制限を緩和する際、理由を README に記録する運用ルールを追加する。
-
 4. Linux 固有設定の追加
    - `os-linux.sh` を作成し、Linux 環境固有のセキュリティ設定を追加する。

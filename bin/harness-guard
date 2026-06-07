@@ -1,0 +1,6 @@
+#!/bin/sh
+CMD_NAME="$(basename "$0")"
+echo "❌ [Harness Guard] $CMD_NAME の実行はPATHレベルで全面的にブロックされました。" >&2
+echo "💡 理由: AIエージェント等による無自覚なコマンド実行（環境汚染）を防ぐためです。" >&2
+echo "✅ 対策: pnpm または uv をプロジェクト内で使用してください。" >&2
+exit 1

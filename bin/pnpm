@@ -1,0 +1,14 @@
+#!/bin/sh
+if [ "$1" = "dlx" ]; then
+    echo "🚨 [Harness Guard] pnpm dlx による一時パッケージの実行はブロックされました。" >&2
+    exit 1
+fi
+
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+_real="$(PATH="${PATH#*$SELF_DIR:}" command -v pnpm)"
+
+if [ -z "$_real" ]; then
+    echo "❌ 本物の pnpm が見つかりません。" >&2
+    exit 1
+fi
+exec "$_real" "$@"

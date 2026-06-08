@@ -3,13 +3,60 @@
 # Dotfiles 設定監査スクリプト (Harness Engineering)
 #
 # 目的: グローバルのセキュリティ設定が実際に有効かを検証する。
-#       pnpm config list ではなく config get を使うことで、
-#       フォーマット不正（YAML混入等）によるパース失敗も検出できる。
 # ============================================================
 
 # --- スクリプト自身のディレクトリを確実に取得 ---
 DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ------------------------------------------------------------
+# 高速健全性チェックモード (--check)
+# .zshrc などから呼び出され、ミリ秒単位でクリティカルな防御網を検証する
+# ------------------------------------------------------------
+if [ "$1" = "--check" ]; then
+    HAS_ERROR=0
+
+    # 1. PATH ガードの生存確認 (POSIX準拠で「先頭」にあるか厳格チェック)
+    case "$PATH" in
+        "$DOTFILES_DIR/bin:"* | "$DOTFILES_DIR/bin")
+            # 正常: 先頭に設定されている
+            ;;
+        *)
+            HAS_ERROR=1
+            ;;
+    esac
+
+    # 2. クリティカルな環境変数の確認
+    if [ "$PIP_REQUIRE_VIRTUALENV" != "true" ]; then
+        HAS_ERROR=1
+    fi
+
+    # macOS の場合のみ Homebrew の設定をチェック
+    if [ "$(uname -s)" = "Darwin" ]; then
+        if [ "$HOMEBREW_NO_AUTO_UPDATE" != "1" ]; then
+            HAS_ERROR=1
+        fi
+    fi
+
+    # 3. リンクの生存確認 (主要ファイルがリンクであるか)
+    if [ ! -L "$HOME/.gitconfig" ] || [ ! -L "$HOME/.config/uv/uv.toml" ]; then
+        HAS_ERROR=1
+    fi
+
+    # 4. bin/ の Git 整合性チェック (改ざん・不審ファイルの検知)
+    if ! git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
+        HAS_ERROR=1
+    fi
+    if [ -n "$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)" ]; then
+        HAS_ERROR=1
+    fi
+
+    # エラーがあれば 1 (異常) を返し、なければ 0 (正常) で静かに終了
+    exit $HAS_ERROR
+fi
+
+# ============================================================
+# フル監査モード (通常実行: ./verify.sh)
+# ============================================================
 PASS=0
 FAIL=0
 
@@ -49,7 +96,7 @@ git_check() {
     fi
 }
 
-echo "🔍 ハーネス設定の監査（ヘルスチェック）を開始します..."
+echo "🔍 ハーネス設定のフル監査を開始します..."
 echo "========================================================="
 
 # ---------------------------------------------------------
@@ -77,7 +124,6 @@ echo "[2] uv セキュリティ設定"
 if command -v uv >/dev/null 2>&1; then
     UV_TOML="$HOME/.config/uv/uv.toml"
 
-    # awk を用いた堅牢なパース (スペース/クォート揺れに対応)
     uv_get() {
         local target_key="$1"
         awk -F'=' -v key="$target_key" '
@@ -110,19 +156,17 @@ if command -v uv >/dev/null 2>&1; then
         fi
     }
 
-    # 設定ファイルがシンボリックリンクかチェック
     if [ -L "$UV_TOML" ]; then
         echo "  ✅ uv.toml はシンボリックリンクです ($(readlink "$UV_TOML"))"
         PASS=$((PASS + 1))
     else
-        echo "  ❌ uv.toml がシンボリックリンクではありません（dotfiles 管理外）"
+        echo "  ❌ uv.toml がシンボリックリンクではありません"
         FAIL=$((FAIL + 1))
     fi
 
     uv_check "exclude-newer (7日検疫)"  exclude-newer  "7 days"
     uv_check "url (公式レジストリ固定)"  url             "https://pypi.org/simple"
 
-    # pip 禁止チェック（PIP_REQUIRE_VIRTUALENV が設定されているか）
     if [ "$PIP_REQUIRE_VIRTUALENV" = "true" ]; then
         echo "  ✅ PIP_REQUIRE_VIRTUALENV=true (仮想環境外インストール禁止)"
         PASS=$((PASS + 1))
@@ -165,7 +209,6 @@ if command -v git >/dev/null 2>&1; then
         FAIL=$((FAIL + 1))
     fi
 
-    # Security-critical Git checks
     git_check "fetch.fsckObjects=true"         fetch.fsckObjects      "true"
     git_check "transfer.fsckObjects=true"      transfer.fsckObjects   "true"
     git_check "protocol.file.allow=never"      protocol.file.allow    "never"
@@ -205,8 +248,6 @@ if [ -f "$VSCODE_SETTINGS" ]; then
                 PASS=$((PASS + 1))
             else
                 echo "  ❌ $label"
-                echo "       期待値: '$expected'"
-                echo "       実際値: '$actual'"
                 FAIL=$((FAIL + 1))
             fi
         else
@@ -234,8 +275,6 @@ if [ -f "$VSCODE_SETTINGS" ]; then
                 PASS=$((PASS + 1))
             else
                 echo "  ❌ $label"
-                echo "       期待値: '$expected'"
-                echo "       実際値: '$actual'"
                 FAIL=$((FAIL + 1))
             fi
         else
@@ -249,8 +288,8 @@ if [ -f "$VSCODE_SETTINGS" ]; then
         fi
     }
 
-    vsc_check_bool "extensions.autoUpdate=false (時間差検疫の土台)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
-    vsc_check_bool "extensions.autoCheckUpdates=true (通知のみ許可)" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
+    vsc_check_bool "extensions.autoUpdate=false (時間差検疫)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
+    vsc_check_bool "extensions.autoCheckUpdates=true" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
     vsc_check_bool "security.workspace.trust.enabled=true" "security.workspace.trust.enabled" "true" '"security\.workspace\.trust\.enabled"[[:space:]]*:[[:space:]]*true'
     vsc_check_bool "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
     vsc_check_string "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
@@ -281,13 +320,17 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$PATH" | tr ':' '\n' | grep -qF "$DOTFILES_DIR/bin"; then
-    echo "  ✅ dotfiles/bin が PATH に含まれています"
-    PASS=$((PASS + 1))
-else
-    echo "  ❌ dotfiles/bin が PATH に含まれていません（setup.sh を実行してください）"
-    FAIL=$((FAIL + 1))
-fi
+# POSIX準拠の PATH 先頭チェック
+case "$PATH" in
+    "$DOTFILES_DIR/bin:"* | "$DOTFILES_DIR/bin")
+        echo "  ✅ dotfiles/bin が PATH の先頭に設定されています"
+        PASS=$((PASS + 1))
+        ;;
+    *)
+        echo "  ❌ dotfiles/bin が PATH の先頭に設定されていません"
+        FAIL=$((FAIL + 1))
+        ;;
+esac
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
@@ -307,8 +350,6 @@ if [ "$(uname -s)" = "Darwin" ]; then
                 PASS=$((PASS + 1))
             else
                 echo "  ❌ $label"
-                echo "       期待値: '$expected'"
-                echo "       実際値: '$actual'"
                 FAIL=$((FAIL + 1))
             fi
         }
@@ -324,38 +365,27 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 # ---------------------------------------------------------
-# 7. ハーネスガードの動的監査 (スモークテスト)
+# 7. PATHシム (bin/) の Git 整合性チェック
 # ---------------------------------------------------------
-echo "[7] ハーネスガードの動的監査 (スモークテスト)"
+echo "[7] PATHシム (bin/) の Git 整合性"
 
-# OSごとのデフォルトシェルを判定
-case "$(uname -s)" in
-  Darwin) TEST_SHELL="zsh" ;;
-  Linux)  TEST_SHELL="bash" ;;
-  *)      TEST_SHELL="sh" ;;
-esac
+if git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
+    echo "  ✅ 既存のシムスクリプトは改ざんされていません"
+    PASS=$((PASS + 1))
+else
+    echo "  ❌ 既存のシムスクリプトが改ざんされています"
+    FAIL=$((FAIL + 1))
+fi
 
-smoke_test() {
-    local cmd="$1"
-    
-    # インタラクティブシェル(-ic)として起動し、.zshrc/.bashrc を読み込ませてから実行する
-    # ※無害な --version を使用するため副作用はゼロです
-    local output
-    output="$($TEST_SHELL -ic "$cmd --version" 2>&1)"
-
-    if echo "$output" | grep -qF "[Harness Guard]"; then
-        echo "  ✅ $cmd (ガード有効: ターミナル起動時に正しくブロックされます)"
-        PASS=$((PASS + 1))
-    else
-        echo "  ❌ $cmd (ガード無効: 実バイナリが実行されました。setup.shが未実行か、設定が漏れています)"
-        FAIL=$((FAIL + 1))
-    fi
-}
-
-# 代表的なコマンドでカナリアテスト (この2つが効いていれば同ファイルの他ガードも有効とみなす)
-smoke_test "npm"
-smoke_test "pip"
-
+UNTRACKED_FILES=$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)
+if [ -z "$UNTRACKED_FILES" ]; then
+    echo "  ✅ 不審な新規ファイルの混入はありません"
+    PASS=$((PASS + 1))
+else
+    echo "  ❌ bin/ 内に未追跡の不審なファイルが存在します"
+    echo "$UNTRACKED_FILES" | sed 's/^/       - /'
+    FAIL=$((FAIL + 1))
+fi
 echo "---------------------------------------------------------"
 
 echo "========================================================="

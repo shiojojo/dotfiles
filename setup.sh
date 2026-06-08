@@ -100,6 +100,11 @@ else
     # OS固有ルールの読み込み
     echo "OS_FILE=\"$DOTFILES_DIR/shell/os-${OS_PREFIX}.sh\"" >> "$RC_FILE"
     echo "[ -f \"\$OS_FILE\" ] && source \"\$OS_FILE\"" >> "$RC_FILE"
+
+    # ターミナル起動時の高速健全性チェック (--check)
+    echo "" >> "$RC_FILE"
+    echo "# ターミナル起動時の高速健全性チェック (--check)" >> "$RC_FILE"
+    echo "\"$DOTFILES_DIR/verify.sh\" --check 2>/dev/null || echo \"🚨 [Harness Guard] 環境の異常または改ざんを検知しました！ '$DOTFILES_DIR/verify.sh' で詳細を確認してください。\"" >> "$RC_FILE"
     
     echo "✅ OS($OS_TYPE): $RC_FILE に動的読み込み処理を追記しました。"
 fi

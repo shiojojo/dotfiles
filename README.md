@@ -89,15 +89,33 @@ dotfiles/
    - **`export PATH="$DOTFILES_DIR/bin:$PATH"` (ガードの最優先適用)**
    - `sec-*.sh` を一括 source するループ (環境変数の適用)
    - `os-mac.sh` / `os-linux.sh` を OS に応じて source
+   - `verify.sh --check` によるターミナル起動時の高速健全性チェック
 
 ## verify.sh の現在検証項目
+
+`./verify.sh` はフル監査モードと高速チェックモードの2種類で動作する。
+
+### フル監査モード (`./verify.sh`)
 
 1. pnpm セキュリティ設定値
 2. uv 設定リンクと設定値・PIP_REQUIRE_VIRTUALENV
 3. Git リンク状態とセキュリティ必須値
 4. VS Code の必須セキュリティ項目監査 (jq / grep フォールバック対応)
-5. **PATH ラッパー (`bin/`) が正しく最優先で適用されているかの監査**
+5. PATH ラッパー (`bin/`) が正しく最優先で適用されているかの監査
 6. Homebrew セキュリティ設定値 (macOS のみ)
+7. `bin/` の git 整合性チェック（改ざん・不審ファイルの検知）
+
+### 高速健全性チェックモード (`./verify.sh --check`)
+
+ターミナル起動時に自動実行される軽量チェック。外部コマンド呼び出しを最小化し数ミリ秒で完了する。
+
+- PATH 先頭に `dotfiles/bin` があるか（case 文による厳格チェック）
+- `PIP_REQUIRE_VIRTUALENV` が設定されているか
+- `HOMEBREW_NO_AUTO_UPDATE` が設定されているか（macOS のみ）
+- `.gitconfig` / `uv.toml` のシンボリックリンクが生きているか
+- `bin/` のスクリプトが git 管理状態から改ざんされていないか
+
+異常を検知した場合のみ警告を表示し、正常時は完全無音で終了する。
 
 ## verify.sh 実行前の注意
 
@@ -130,11 +148,7 @@ source ~/.bashrc  # Linux
 
 ## 今後追加すべきもの (提案)
 
-1. verify の「必須/任意」モード分離
-   - `./verify.sh --strict` を追加し、CI とローカル確認で厳しさを切り替える。
-2. 監査ログの最小出力
-   - verify 結果を `./verify.sh --summary` で 1 行出力できるようにし、運用確認を簡素化する。
-3. 例外設定の明文化
+1. 例外設定の明文化
    - プロジェクト側で検疫や build 制限を緩和する際、理由を README に記録する運用ルールを追加する。
-4. Linux 固有設定の追加
+2. Linux 固有設定の追加
    - `os-linux.sh` を作成し、Linux 環境固有のセキュリティ設定を追加する。

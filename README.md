@@ -23,7 +23,8 @@ dotfiles/
 │   └── settings.json
 ├── shell/                     ← 環境変数・エイリアス定義
 │   ├── sec-python.sh          (PIP_REQUIRE_VIRTUALENV等)
-│   └── os-mac.sh              (macOS固有設定)
+│   ├── os-mac.sh              (macOS/zsh固有設定・履歴保護)
+│   └── os-linux.sh            (Linux/bash固有設定・履歴保護)
 ├── uv/
 │   └── uv.toml
 ├── setup.sh
@@ -65,12 +66,20 @@ dotfiles/
 - `vscode/settings.json` は「コピペ用テンプレート」として管理する
 - ユーザー設定に手動反映した内容を verify.sh で厳格監査する
 
-### Homebrew / macOS (os-mac.sh)
+### Homebrew / macOS / zsh (os-mac.sh)
 
 - `HOMEBREW_NO_AUTO_UPDATE=1` (自動更新禁止)
 - `HOMEBREW_CASK_OPTS=--require-sha` (SHA チェックサム必須)
 - `HOMEBREW_NO_INSECURE_REDIRECT=1` (MITM 対策)
 - `HOMEBREW_NO_ANALYTICS=1` (テレメトリ無効化)
+- `setopt HIST_IGNORE_SPACE` (スペース始まりのコマンド履歴除外)
+- `HISTORY_IGNORE` (機密情報トークンの履歴除外)
+
+### apt / Linux / bash (os-linux.sh)
+
+- `apt` 等のパッケージ管理コマンドはシステム全体に影響を及ぼすため、`sudo` を伴う明示的な手動実行のみを正とし、ラッパーや自動化は行わない（最大防御）。
+- `HISTCONTROL=ignoreboth` (スペース始まり・重複コマンドの履歴除外)
+- `HISTIGNORE` (機密情報トークンの履歴除外)
 
 ## アップデート運用方針 (VS Code)
 
@@ -84,11 +93,11 @@ dotfiles/
 1. pnpm 設定をグローバル設定ファイルへリンク
 2. uv 設定を `~/.config/uv/uv.toml` へリンク
 3. Git 設定ファイルの存在確認とホームへのリンク作成
-4. `bin/` 配下のシムスクリプト群への実行権限付与と、共通ガードへのシンボリックリンク生成
+4. 実行スクリプト (`verify.sh`) とシムスクリプト群 (`bin/`) への実行権限付与とリンク生成
 5. OS を自動判定し、RC ファイル (`.zshrc` / `.bashrc`) に以下を追記 (未設定時のみ)
    - **`export PATH="$DOTFILES_DIR/bin:$PATH"` (ガードの最優先適用)**
-   - `sec-*.sh` を一括 source するループ (環境変数の適用)
-   - `os-mac.sh` / `os-linux.sh` を OS に応じて source
+   - `sec-*.sh` を一括 source するループ (共通環境変数の適用)
+   - `os-mac.sh` / `os-linux.sh` を OS に応じて source (OS固有設定・履歴保護)
    - `verify.sh --check` によるターミナル起動時の高速健全性チェック
 
 ## verify.sh の現在検証項目
@@ -98,10 +107,10 @@ dotfiles/
 ### フル監査モード (`./verify.sh`)
 
 1. pnpm セキュリティ設定値
-2. uv 設定リンクと設定値・PIP_REQUIRE_VIRTUALENV
+2. uv 設定リンクと設定値・`PIP_REQUIRE_VIRTUALENV`
 3. Git リンク状態とセキュリティ必須値
 4. VS Code の必須セキュリティ項目監査 (jq / grep フォールバック対応)
-5. PATH ラッパー (`bin/`) が正しく最優先で適用されているかの監査
+5. シェル環境 (PATHラッパーの最優先適用 と OSごとの履歴保護設定の監査)
 6. Homebrew セキュリティ設定値 (macOS のみ)
 7. `bin/` の git 整合性チェック（改ざん・不審ファイルの検知）
 
@@ -111,7 +120,7 @@ dotfiles/
 
 - PATH 先頭に `dotfiles/bin` があるか（case 文による厳格チェック）
 - `PIP_REQUIRE_VIRTUALENV` が設定されているか
-- `HOMEBREW_NO_AUTO_UPDATE` が設定されているか（macOS のみ）
+- OSごとの防衛・履歴保護設定 (`HOMEBREW_NO_AUTO_UPDATE`, `HISTORY_IGNORE`, `HISTIGNORE` 等) が設定されているか
 - `.gitconfig` / `uv.toml` のシンボリックリンクが生きているか
 - `bin/` のスクリプトが git 管理状態から改ざんされていないか
 
@@ -150,5 +159,3 @@ source ~/.bashrc  # Linux
 
 1. 例外設定の明文化
    - プロジェクト側で検疫や build 制限を緩和する際、理由を README に記録する運用ルールを追加する。
-2. Linux 固有設定の追加
-   - `os-linux.sh` を作成し、Linux 環境固有のセキュリティ設定を追加する。

@@ -54,8 +54,13 @@ ln -snf "$DOTFILES_DIR/git/.gitignore_global" "$HOME/.gitignore_global"
 echo "✅ Git: .gitconfig と .gitignore_global のリンクを作成しました。"
 
 # ---------------------------------------------------------
-# 4. bin/ シムのセットアップ
+# 4. 実行スクリプトとシム (bin/) のセットアップ
 # ---------------------------------------------------------
+# 監査ツールへの実行権限付与
+chmod +x "$DOTFILES_DIR/verify.sh"
+echo "✅ verify.sh: 実行権限を付与しました。"
+
+# シム (bin/) のセットアップ
 SHIM_DIR="$DOTFILES_DIR/bin"
 chmod +x "$SHIM_DIR/harness-guard" "$SHIM_DIR/pnpm" "$SHIM_DIR/uv"
 

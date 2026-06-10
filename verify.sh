@@ -30,9 +30,13 @@ if [ "$1" = "--check" ]; then
         HAS_ERROR=1
     fi
 
-    # macOS の場合のみ Homebrew の設定をチェック
+    # OSごとの防衛設定・履歴保護が有効かチェック
     if [ "$(uname -s)" = "Darwin" ]; then
-        if [ "$HOMEBREW_NO_AUTO_UPDATE" != "1" ]; then
+        if [ "$HOMEBREW_NO_AUTO_UPDATE" != "1" ] || [ -z "$HISTORY_IGNORE" ]; then
+            HAS_ERROR=1
+        fi
+    elif [ "$(uname -s)" = "Linux" ]; then
+        if [ -z "$HISTIGNORE" ]; then
             HAS_ERROR=1
         fi
     fi
@@ -331,6 +335,32 @@ case "$PATH" in
         FAIL=$((FAIL + 1))
         ;;
 esac
+
+# 履歴保護設定のチェック
+if [ "$(uname -s)" = "Darwin" ]; then
+    if [ "$HISTORY_IGNORE" = "(*TOKEN*|*SECRET*|*PASSWORD*|*KEY*|*API_KEY*|*AUTH*)" ]; then
+        echo "  ✅ HISTORY_IGNORE (履歴保護) が正しく設定されています"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ HISTORY_IGNORE (履歴保護) が設定されていません"
+        FAIL=$((FAIL + 1))
+    fi
+elif [ "$(uname -s)" = "Linux" ]; then
+    if [ "$HISTIGNORE" = "*TOKEN*:*SECRET*:*PASSWORD*:*KEY*:*API_KEY*:*AUTH*" ]; then
+        echo "  ✅ HISTIGNORE (履歴保護) が正しく設定されています"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ HISTIGNORE (履歴保護) が設定されていません"
+        FAIL=$((FAIL + 1))
+    fi
+    if [ "$HISTCONTROL" = "ignoreboth" ]; then
+        echo "  ✅ HISTCONTROL (重複・スペース無視) が正しく設定されています"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ HISTCONTROL (重複・スペース無視) が設定されていません"
+        FAIL=$((FAIL + 1))
+    fi
+fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # ============================================================
 # Dotfiles 設定監査スクリプト (Harness Engineering)
 #
@@ -82,6 +82,23 @@ check() {
     fi
 }
 
+# pnpm 11 のマップ/配列仕様に対応した allow-builds 専用チェック
+check_pnpm_allow_builds() {
+    local actual
+    actual="$(pnpm config get allow-builds --global 2>/dev/null)"
+
+    # 文字列の空 ""、配列の空 "[]"、マップの空 "{}" のいずれも許可
+    if [ "$actual" = "" ] || [ "$actual" = "[]" ] || [ "$actual" = "{}" ]; then
+        echo "  ✅ allow-builds (postinstall全拒否)"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ allow-builds (postinstall全拒否)"
+        echo "       期待値: '' または '[]' または '{}'"
+        echo "       実際値: '$actual'"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
 git_check() {
     local label="$1"
     local key="$2"
@@ -115,7 +132,7 @@ if command -v pnpm >/dev/null 2>&1; then
     check "minimum-release-age=10080 (7日検疫)"       minimum-release-age      "10080"
     check "minimum-release-age-strict=true"           minimum-release-age-strict "true"
     check "trust-policy=no-downgrade (降格防止)"      trust-policy             "no-downgrade"
-    check "allow-builds='' (postinstall全拒否)"        allow-builds             ""
+    check_pnpm_allow_builds
 else
     echo "  ⚠️ pnpm がインストールされていないか、パスが通っていません。"
 fi
@@ -238,7 +255,8 @@ if [ -f "$VSCODE_SETTINGS" ]; then
         VSCODE_JSON_VALID=1
     fi
 
-    vsc_check_bool() {
+    # ブール値・文字列問わず、統一された検証関数
+    vsc_check() {
         local label="$1"
         local key="$2"
         local expected="$3"
@@ -265,41 +283,14 @@ if [ -f "$VSCODE_SETTINGS" ]; then
         fi
     }
 
-    vsc_check_string() {
-        local label="$1"
-        local key="$2"
-        local expected="$3"
-        local regex="$4"
-        local actual
-
-        if [ "$VSCODE_JSON_VALID" -eq 1 ]; then
-            actual="$(jq -r ".[\"$key\"] // \"未設定\"" "$VSCODE_SETTINGS" 2>/dev/null || echo "未設定")"
-            if [ "$actual" = "$expected" ]; then
-                echo "  ✅ $label"
-                PASS=$((PASS + 1))
-            else
-                echo "  ❌ $label"
-                FAIL=$((FAIL + 1))
-            fi
-        else
-            if grep -Eq "$regex" "$VSCODE_SETTINGS"; then
-                echo "  ✅ $label"
-                PASS=$((PASS + 1))
-            else
-                echo "  ❌ $label"
-                FAIL=$((FAIL + 1))
-            fi
-        fi
-    }
-
-    vsc_check_bool "extensions.autoUpdate=false (時間差検疫)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
-    vsc_check_bool "extensions.autoCheckUpdates=true" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
-    vsc_check_bool "security.workspace.trust.enabled=true" "security.workspace.trust.enabled" "true" '"security\.workspace\.trust\.enabled"[[:space:]]*:[[:space:]]*true'
-    vsc_check_bool "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
-    vsc_check_string "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
-    vsc_check_string "update.mode=manual" "update.mode" "manual" '"update\.mode"[[:space:]]*:[[:space:]]*"manual"'
-    vsc_check_string "telemetry.telemetryLevel=off" "telemetry.telemetryLevel" "off" '"telemetry\.telemetryLevel"[[:space:]]*:[[:space:]]*"off"'
-    vsc_check_bool "workbench.enableExperiments=false" "workbench.enableExperiments" "false" '"workbench\.enableExperiments"[[:space:]]*:[[:space:]]*false'
+    vsc_check "extensions.autoUpdate=false (時間差検疫)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
+    vsc_check "extensions.autoCheckUpdates=true" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
+    vsc_check "security.workspace.trust.enabled=true" "security.workspace.trust.enabled" "true" '"security\.workspace\.trust\.enabled"[[:space:]]*:[[:space:]]*true'
+    vsc_check "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
+    vsc_check "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
+    vsc_check "update.mode=manual" "update.mode" "manual" '"update\.mode"[[:space:]]*:[[:space:]]*"manual"'
+    vsc_check "telemetry.telemetryLevel=off" "telemetry.telemetryLevel" "off" '"telemetry\.telemetryLevel"[[:space:]]*:[[:space:]]*"off"'
+    vsc_check "workbench.enableExperiments=false" "workbench.enableExperiments" "false" '"workbench\.enableExperiments"[[:space:]]*:[[:space:]]*false'
 else
     echo "  ❌ VS Code の settings.json が見つかりません"
     FAIL=$((FAIL + 1))

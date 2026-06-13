@@ -11,15 +11,29 @@ echo "🔗 ハーネス設定のセットアップを開始します..."
 echo "📂 検出された Dotfiles ディレクトリ: $DOTFILES_DIR"
 
 # ---------------------------------------------------------
-# 1. pnpm 設定の適用 (pnpm から動的にパスを取得)
+# 1. pnpm 設定の適用 (pnpm 11 の auth/非auth 分離対応)
 # ---------------------------------------------------------
 if command -v pnpm >/dev/null 2>&1; then
-    PNPM_GLOBAL_RC="$(pnpm config get globalconfig)"
+    # pnpm 11 の globalconfig は通常 rc (auth用) を指す
+    PNPM_GLOBAL_RC="$(pnpm config get globalconfig 2>/dev/null || echo "$HOME/.config/pnpm/rc")"
     PNPM_CONFIG_DIR="$(dirname "$PNPM_GLOBAL_RC")"
     
     mkdir -p "$PNPM_CONFIG_DIR"
-    ln -snf "$DOTFILES_DIR/pnpm/config" "$PNPM_GLOBAL_RC"
-    echo "✅ pnpm: リンクを作成しました ($PNPM_GLOBAL_RC)。"
+    
+    # 1. auth用 (従来のINI形式: rc)
+    if [ -f "$DOTFILES_DIR/pnpm/config" ]; then
+        ln -snf "$DOTFILES_DIR/pnpm/config" "$PNPM_GLOBAL_RC"
+        echo "✅ pnpm: rc (auth用/旧config) のリンクを作成しました ($PNPM_GLOBAL_RC)。"
+    fi
+
+    # 2. 非auth用 (pnpm 11 以降のYAML形式: config.yaml)
+    PNPM_YAML="$PNPM_CONFIG_DIR/config.yaml"
+    if [ -f "$DOTFILES_DIR/pnpm/config.yaml" ]; then
+        ln -snf "$DOTFILES_DIR/pnpm/config.yaml" "$PNPM_YAML"
+        echo "✅ pnpm: config.yaml のリンクを作成しました ($PNPM_YAML)。"
+    else
+        echo "⚠️ pnpm 11向け: $DOTFILES_DIR/pnpm/config.yaml が見つかりません。今後のために非auth設定のYAML化を推奨します。"
+    fi
 else
     echo "⚠️ pnpm コマンドが見つかりません。pnpmの設定をスキップします。"
 fi

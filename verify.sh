@@ -41,17 +41,22 @@ if [ "$1" = "--check" ]; then
         fi
     fi
 
-    # 3. リンクの生存確認 (主要ファイルがリンクであるか)
-    if [ ! -L "$HOME/.gitconfig" ] || [ ! -L "$HOME/.config/uv/uv.toml" ]; then
+    # 3. リンクと include の生存確認
+    if [ ! -f "$HOME/.gitconfig" ] || ! grep -qF "$DOTFILES_DIR/git/config_shared" "$HOME/.gitconfig" >/dev/null 2>&1; then
+        HAS_ERROR=1
+    fi
+    if [ ! -L "$HOME/.config/uv/uv.toml" ]; then
         HAS_ERROR=1
     fi
 
     # 4. bin/ の Git 整合性チェック (改ざん・不審ファイルの検知)
-    if ! git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
-        HAS_ERROR=1
-    fi
-    if [ -n "$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)" ]; then
-        HAS_ERROR=1
+    if command -v git >/dev/null 2>&1; then
+        if ! git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
+            HAS_ERROR=1
+        fi
+        if [ -n "$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)" ]; then
+            HAS_ERROR=1
+        fi
     fi
 
     # エラーがあれば 1 (異常) を返し、なければ 0 (正常) で静かに終了
@@ -104,7 +109,8 @@ git_check() {
     local key="$2"
     local expected="$3"
     local actual
-    actual="$(git config --global --get "$key" 2>/dev/null || echo "")"
+    # --includes を追加して include 先の設定も取得対象にする
+    actual="$(git config --global --includes --get "$key" 2>/dev/null || echo "")"
 
     if [ "$actual" = "$expected" ]; then
         echo "  ✅ $label"
@@ -205,11 +211,13 @@ echo "---------------------------------------------------------"
 # ---------------------------------------------------------
 echo "[3] Git グローバル設定"
 if command -v git >/dev/null 2>&1; then
-    if [ -L "$HOME/.gitconfig" ]; then
-        echo "  ✅ ~/.gitconfig はシンボリックリンクです ($(readlink "$HOME/.gitconfig"))"
+    GITCONFIG_SHARED="$DOTFILES_DIR/git/config_shared"
+
+    if git config --global --get-all include.path 2>/dev/null | grep -qF "$GITCONFIG_SHARED"; then
+        echo "  ✅ ~/.gitconfig に共通設定 ($GITCONFIG_SHARED) が include されています"
         PASS=$((PASS + 1))
     else
-        echo "  ❌ ~/.gitconfig がシンボリックリンクではありません"
+        echo "  ❌ ~/.gitconfig に共通設定の include が設定されていません"
         FAIL=$((FAIL + 1))
     fi
 
@@ -221,7 +229,8 @@ if command -v git >/dev/null 2>&1; then
         FAIL=$((FAIL + 1))
     fi
 
-    EXCLUDES="$(git config --global --get core.excludesfile || echo "")"
+    # --includes を追加して include 先の設定も取得対象にする
+    EXCLUDES="$(git config --global --includes --get core.excludesfile || echo "")"
     if [ "$EXCLUDES" = "$HOME/.gitignore_global" ] || [ "$EXCLUDES" = "~/.gitignore_global" ]; then
         echo "  ✅ core.excludesfile ($EXCLUDES)"
         PASS=$((PASS + 1))
@@ -390,22 +399,26 @@ fi
 # ---------------------------------------------------------
 echo "[7] PATHシム (bin/) の Git 整合性"
 
-if git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
-    echo "  ✅ 既存のシムスクリプトは改ざんされていません"
-    PASS=$((PASS + 1))
-else
-    echo "  ❌ 既存のシムスクリプトが改ざんされています"
-    FAIL=$((FAIL + 1))
-fi
+if command -v git >/dev/null 2>&1; then
+    if git -C "$DOTFILES_DIR" diff --quiet HEAD -- bin/ > /dev/null 2>&1; then
+        echo "  ✅ 既存のシムスクリプトは改ざんされていません"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ 既存のシムスクリプトが改ざんされています"
+        FAIL=$((FAIL + 1))
+    fi
 
-UNTRACKED_FILES=$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)
-if [ -z "$UNTRACKED_FILES" ]; then
-    echo "  ✅ 不審な新規ファイルの混入はありません"
-    PASS=$((PASS + 1))
+    UNTRACKED_FILES=$(git -C "$DOTFILES_DIR" ls-files --others --exclude-standard bin/)
+    if [ -z "$UNTRACKED_FILES" ]; then
+        echo "  ✅ 不審な新規ファイルの混入はありません"
+        PASS=$((PASS + 1))
+    else
+        echo "  ❌ bin/ 内に未追跡の不審なファイルが存在します"
+        echo "$UNTRACKED_FILES" | sed 's/^/       - /'
+        FAIL=$((FAIL + 1))
+    fi
 else
-    echo "  ❌ bin/ 内に未追跡の不審なファイルが存在します"
-    echo "$UNTRACKED_FILES" | sed 's/^/       - /'
-    FAIL=$((FAIL + 1))
+    echo "  ⚠️ Git がインストールされていないため、整合性チェックをスキップします。"
 fi
 echo "---------------------------------------------------------"
 

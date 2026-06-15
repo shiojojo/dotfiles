@@ -1,0 +1,23 @@
+# ============================================================
+# Git Shared Config (Harness Engineering)
+# ============================================================
+
+[core]
+    # グローバルな .gitignore の指定
+    excludesfile = ~/.gitignore_global
+
+[fetch]
+    # リモートから取得するオブジェクトの破損や悪意のある改ざんを検証
+    fsckObjects = true
+
+[transfer]
+    # プッシュ/プル時のオブジェクト検証を強制
+    fsckObjects = true
+
+[protocol "file"]
+    # ローカルファイルシステムを跨いだ悪意のあるクローン（CVE-2022-39253等）を防止
+    allow = never
+
+[http]
+    # SSL証明書の検証を強制（MITM攻撃対策）
+    sslVerify = true

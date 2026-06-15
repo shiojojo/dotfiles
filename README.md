@@ -29,8 +29,8 @@ dotfiles/
 ├── uv/
 │   └── uv.toml
 ├── git/
-│   ├── .gitconfig
-│   └── .gitignore_global
+│   ├── config_shared
+│   └── gitignore_global
 ├── vscode/
 │   └── settings.json
 └── README.md

@@ -51,21 +51,43 @@ else
 fi
 
 # ---------------------------------------------------------
-# 3. Git 設定の適用 (シンボリックリンク)
+# 3. Git 設定の適用 (ローカル主導の Reverse Include 方式)
 # ---------------------------------------------------------
-if [ ! -f "$DOTFILES_DIR/git/.gitconfig" ]; then
-    echo "❌ $DOTFILES_DIR/git/.gitconfig が存在しません。"
+if ! command -v git >/dev/null 2>&1; then
+    echo "❌ git コマンドが見つかりません。Gitのインストールが必要です。"
     exit 1
 fi
 
-if [ ! -f "$DOTFILES_DIR/git/.gitignore_global" ]; then
-    echo "❌ $DOTFILES_DIR/git/.gitignore_global が存在しません。"
+if [ ! -f "$DOTFILES_DIR/git/config_shared" ]; then
+    echo "❌ $DOTFILES_DIR/git/config_shared が存在しません。"
     exit 1
 fi
 
-ln -snf "$DOTFILES_DIR/git/.gitconfig" "$HOME/.gitconfig"
-ln -snf "$DOTFILES_DIR/git/.gitignore_global" "$HOME/.gitignore_global"
-echo "✅ Git: .gitconfig と .gitignore_global のリンクを作成しました。"
+if [ ! -f "$DOTFILES_DIR/git/gitignore_global" ]; then
+    echo "❌ $DOTFILES_DIR/git/gitignore_global が存在しません。"
+    exit 1
+fi
+
+GITCONFIG_LOCAL="$HOME/.gitconfig"
+GITCONFIG_SHARED="$DOTFILES_DIR/git/config_shared"
+
+# 以前の構成（シンボリックリンク）が残っていたら削除して事故を防ぐ
+if [ -L "$GITCONFIG_LOCAL" ]; then
+    echo "⚠️ ~/.gitconfig のシンボリックリンクを解除します..."
+    rm "$GITCONFIG_LOCAL"
+fi
+
+# Git コマンドを使用して安全に include.path を追加（冪等性担保）
+if ! git config --global --get-all include.path 2>/dev/null | grep -qF "$GITCONFIG_SHARED"; then
+    git config --global --add include.path "$GITCONFIG_SHARED"
+    echo "✅ Git: ~/.gitconfig に共通設定 ($GITCONFIG_SHARED) の include を追加しました。"
+else
+    echo "✅ Git: ~/.gitconfig に共通設定の include は設定済みです。"
+fi
+
+# .gitignore_global は機密情報を持たないので従来通りリンクでOK
+ln -snf "$DOTFILES_DIR/git/gitignore_global" "$HOME/.gitignore_global"
+echo "✅ Git: .gitignore_global のリンクを作成しました。"
 
 # ---------------------------------------------------------
 # 4. 実行スクリプトとシム (bin/) のセットアップ

@@ -3,4 +3,10 @@ CMD_NAME="$(basename "$0")"
 echo "❌ [Harness Guard] $CMD_NAME の実行はPATHレベルで全面的にブロックされました。" >&2
 echo "💡 理由: AIエージェント等による無自覚なコマンド実行（環境汚染）を防ぐためです。" >&2
 echo "✅ 対策: pnpm または uv をプロジェクト内で使用してください。" >&2
+
+# 監査ログの記録 (情報漏洩を防ぐため第1引数のみ記録)
+LOG_FILE="$HOME/.local/state/harness/logs/blocked.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [BLOCKED] PWD: $PWD | CMD: $CMD_NAME ${1:-}" >> "$LOG_FILE"
+
 exit 1

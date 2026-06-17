@@ -8,6 +8,13 @@
   1. **システム層 (OS環境変数):** バックグラウンドプロセスやGUIアプリを含むOS全体にグローバルな制限を強制する（root権限）。
   2. **ユーザー層 (PATHシム):** 人間・AI問わず、引数による強制突破などの危険なコマンド実行を物理的にインターセプトしてブロックする（通常権限）。
 
+## 制限事項と脅威モデル (Limitations & Threat Model)
+
+本構成のユーザー層防御（Shim）は、**AIエージェントのハルシネーションや、人間の無意識なタイポによる環境汚染を物理的に防ぐ「ガードレール」**としての役割に特化しています。
+
+- **絶対パス実行のすり抜け:** `/usr/local/bin/npm` などの絶対パスを用いた直接実行や、悪意のあるプロセスが意図的に PATH を書き換えた場合の実行までは防ぎません。
+- **理由:** これらの行為が実行された時点でシステムはすでに侵害（Compromised）されている前提となり、ユーザー権限の PATH シムで防ぐべき脅威のスコープ外であるためです。過剰なインターセプトによる OS の破壊や脆弱性の誘発を避けるため、防御はシンプルなシェルスクリプトに留めています。
+
 ## 現在の構成
 
 ```text
@@ -70,7 +77,6 @@ dotfiles/
 - `core.excludesfile=~/.gitignore_global`
 - `fetch.fsckObjects=true` / `transfer.fsckObjects=true`
 - `protocol.file.allow=never`
-- `http.sslVerify=true`
 
 #### VS Code (時間差検疫)
 
@@ -130,6 +136,12 @@ sudo ./verify-system.sh
 
 ターミナル起動時に `.zshrc` 等から自動実行されるミリ秒単位の軽量チェック。PATH の先頭が `dotfiles/bin` に向いているか、シムスクリプトに改ざん（未追跡ファイルの混入）がないかを監視し、異常時のみ警告を出す。
 
+### 4. ブロック監査ログ (AIのハルシネーション確認)
+
+`harness-guard` によってブロックされたコマンドの履歴は、以下のログファイルに記録されます。AIがバックグラウンドでどのような不正なコマンドを実行しようとしたかを確認する際に使用します。
+
+- **ブロックログ:** `~/.local/state/harness/logs/blocked.log`
+
 ## VS Code の手動設定手順
 
 1. VS Code で Settings(JSON) を開く (Mac: `Cmd+Shift+P` -> `Open User Settings (JSON)`)
@@ -149,6 +161,8 @@ sudo ./verify-system.sh
 }
 ```
 
+> **注:** `workbench.enableExperiments: false` はMicrosoftのA/Bテストを無効化する安定性設定であり、厳密にはセキュリティ設定ではない。
+
 ## アップデート運用方針 (VS Code)
 
 - 更新作業は週1回のメンテ枠でのみ実施する。
@@ -156,7 +170,35 @@ sudo ./verify-system.sh
 - 重大インシデント速報が出た拡張は更新せず、Marketplace の取り下げ確認後に再評価する。
 - 例外的に即時更新した場合は、理由をこの README に記録する。
 
-## 今後追加すべきもの (提案)
+## 例外運用ルール (Escape Hatches)
 
-1. 例外設定の明文化
-   - プロジェクト側で検疫や build 制限を緩和する際（例: pnpm の `allow-builds` の許可など）、理由を README に記録する運用ルールを追加する。
+システム全体で強制しているセキュリティ制限を、明確な意図をもって一時的にバイパスする際の手順です。実行した場合は、必ずプロジェクトのコミットログや PR にその理由を記録してください。
+
+### 1. 7日検疫のバイパス（緊急パッチ適用時など）
+
+パッケージマネージャーのリリース日制限を一時的に無効化し、最新のパッケージをインストールします。
+
+**Node.js (pnpm) の場合:**
+
+環境変数で `MINIMUM_RELEASE_AGE` を 0 に上書きして実行します。
+
+```sh
+PNPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm add <package-name>
+```
+
+**Python (uv) の場合:**
+
+サブシェル内で `UV_EXCLUDE_NEWER` を明示的に解除して実行します。親シェルの環境変数は変更されません。
+
+```sh
+(unset UV_EXCLUDE_NEWER && uv add <package-name>)
+```
+
+### 2. インストールスクリプトの許可 (pnpm)
+
+ネイティブバイナリのビルドなど、どうしても `postinstall` スクリプトの実行が必要な信頼できるパッケージに対してのみ、プロジェクト内の `.npmrc` に以下を明記して局所的に許可します（グローバルでは許可しない）。
+
+```ini
+# .npmrc (プロジェクトルート)
+pnpm.onlyBuiltDependencies[]="<package-name>"
+```

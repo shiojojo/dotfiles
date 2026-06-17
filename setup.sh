@@ -101,12 +101,21 @@ SHIM_DIR="$DOTFILES_DIR/bin"
 chmod +x "$SHIM_DIR/harness-guard" "$SHIM_DIR/pnpm" "$SHIM_DIR/uv"
 
 for cmd in npm npx pip pip3 uvx pnpx; do
+    # 相対パスでのリンク作成（$SHIM_DIR 内から見た相対位置）
     ln -snf harness-guard "$SHIM_DIR/$cmd"
 done
 echo "✅ bin/: シムのリンクを作成しました。"
 
 # ---------------------------------------------------------
-# 5. シェル環境設定の適用
+# 5. 監査ログ (Harness Guard) の環境準備
+# ---------------------------------------------------------
+HARNESS_LOG_DIR="$HOME/.local/state/harness/logs"
+mkdir -p "$HARNESS_LOG_DIR"
+touch "$HARNESS_LOG_DIR/blocked.log"
+echo "✅ 監査ログ: $HARNESS_LOG_DIR/blocked.log を準備しました。"
+
+# ---------------------------------------------------------
+# 6. シェル環境設定の適用
 # ---------------------------------------------------------
 OS_TYPE="$(uname -s)"
 if [ "$OS_TYPE" = "Darwin" ]; then

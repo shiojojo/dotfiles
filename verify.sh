@@ -361,6 +361,17 @@ elif [ "$(uname -s)" = "Linux" ]; then
         FAIL=$((FAIL + 1))
     fi
 fi
+
+# 監査ログディレクトリの健全性チェック
+HARNESS_LOG_DIR="$HOME/.local/state/harness/logs"
+if [ -d "$HARNESS_LOG_DIR" ] && [ -w "$HARNESS_LOG_DIR" ]; then
+    echo "  ✅ 監査ログディレクトリ ($HARNESS_LOG_DIR) への書き込み権限があります"
+    PASS=$((PASS + 1))
+else
+    echo "  ❌ 監査ログディレクトリ ($HARNESS_LOG_DIR) が存在しないか、書き込み権限がありません"
+    FAIL=$((FAIL + 1))
+fi
+
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------

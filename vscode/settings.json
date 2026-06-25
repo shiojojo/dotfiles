@@ -1,24 +1,291 @@
 {
-  // ==========================================
-  // VS Code Harness Settings (Copy/Paste Template)
-  // ==========================================
+  // ============================================================
+  // VS Code / Cursor Security Baseline
+  // ============================================================
+  //
+  // 目的:
+  //   AI利用・OSS閲覧・個人開発を前提とした最低限のハードニング。
+  //
+  // 方針:
+  //   利便性よりも「意図しない実行」と
+  //   「意図しない更新」を抑制することを優先する。
+  //
+  // 注意:
+  //   この設定は万能ではない。
+  //   README に記載の「防げないもの」も必ず参照すること。
+  //
+  // ============================================================
 
-  // 1. 拡張機能のサプライチェーン攻撃対策
-  // 勝手な実行（乗っ取りアップデート）を防ぎつつ、通知だけは受け取る
+
+
+  // ============================================================
+  // 1. Extension Supply Chain
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   Marketplace上の正規拡張が乗っ取られ、
+  //   悪意ある更新が配布される。
+  //
+  // 効果:
+  //   拡張機能の更新を手動化する。
+  //
+  // 防げないもの:
+  //   - 手動更新
+  //   - 初回インストール
+  //   - Marketplace自体の信頼性問題
+  //
+  // 採用理由:
+  //   更新内容を確認してから適用するため。
+  //
+  // Source:
+  // https://code.visualstudio.com/docs/editor/extension-marketplace
   "extensions.autoUpdate": false,
+
+
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   autoUpdate無効化による更新見逃し。
+  //
+  // 効果:
+  //   更新通知だけ受け取る。
+  //
+  // 採用理由:
+  //   「通知→確認→手動更新」の運用を成立させる。
+  //
+  // Source:
+  // Extension Marketplace
   "extensions.autoCheckUpdates": true,
 
-  // 2. ワークスペースの保護（自動実行の罠を防ぐ）
+
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   リポジトリに含まれる
+  //   .vscode/extensions.json による推奨拡張。
+  //
+  // 効果:
+  //   推奨ポップアップを表示しない。
+  //
+  // 防げないもの:
+  //   - 手動インストール
+  //   - Marketplace上の悪意ある拡張
+  //
+  // 採用理由:
+  //   「とりあえず推奨だから入れる」
+  //   という行動を避ける。
+  //
+  // Source:
+  // Extension Marketplace
+  "extensions.ignoreRecommendations": true,
+
+
+
+  // ============================================================
+  // 2. Workspace Trust
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   GitHub等から取得した未知のリポジトリ。
+  //
+  //   例:
+  //   - .vscode/tasks.json
+  //   - .vscode/launch.json
+  //   - .vscode/settings.json
+  //
+  // 効果:
+  //   未信頼ワークスペースを Restricted Mode で開く。
+  //
+  // Restricted Modeで制限されるもの:
+  //   - Tasks
+  //   - Debugging
+  //   - AI Agents
+  //   - 一部拡張機能
+  //   - 一部 Workspace Settings
+  //
+  // 防げないもの:
+  //   - 信頼済みにした後の悪意あるコード
+  //   - 悪意ある拡張機能
+  //
+  // 採用理由:
+  //   最も重要な防御境界。
+  //
+  // Source:
+  // https://code.visualstudio.com/docs/editing/workspaces/workspace-trust
   "security.workspace.trust.enabled": true,
-  // 空ウィンドウでも既定で Restricted Mode にする
+
+
+
+  // [VS Code / Cursor]
+  //
+  // 効果:
+  //   空ウィンドウを既定で信頼しない。
+  //
+  // 採用理由:
+  //   Workspace Trustの運用を保守的にする。
+  //
+  // Source:
+  // Workspace Trust Settings
   "security.workspace.trust.emptyWindow": false,
-  // 未信頼ファイルを開くときは必ず確認を求める
+
+
+
+  // [VS Code / Cursor]
+  //
+  // 効果:
+  //   未信頼ファイルを開く際に確認する。
+  //
+  // 採用理由:
+  //   外部から取得した単一ファイルを
+  //   無条件に扱わない。
+  //
+  // Source:
+  // Workspace Trust Settings
   "security.workspace.trust.untrustedFiles": "prompt",
 
-  // 3. VS Code 本体更新の手動化（時間差検疫）
+
+
+  // [VS Code / Cursor]
+  //
+  // 判断:
+  //   毎回確認を出す運用は採用しない。
+  //
+  // 理由:
+  //   アラート慣れを招き、
+  //   結果として無条件許可につながる。
+  //
+  // 採用理由:
+  //   VS Code既定値（once）の方が
+  //   現実的な運用と判断。
+  //
+  // Source:
+  // Workspace Trust Settings
+  "security.workspace.trust.startupPrompt": "once",
+
+
+
+  // ============================================================
+  // 3. Automatic Task Execution
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   tasks.json の
+  //   runOptions.runOn = folderOpen
+  //   による自動実行。
+  //
+  // 効果:
+  //   フォルダオープン時の自動タスクを禁止。
+  //
+  // 防げないもの:
+  //   - 手動実行
+  //   - 信頼済み環境でのコマンド実行
+  //
+  // 採用理由:
+  //   Workspace Trustを補完する
+  //   多層防御。
+  //
+  // Source:
+  // https://code.visualstudio.com/docs/debugtest/tasks
+  "task.allowAutomaticTasks": "off",
+
+
+
+  // ============================================================
+  // 4. Update Management
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 脅威:
+  //   自動更新による仕様変更や不具合混入。
+  //
+  // 効果:
+  //   本体更新を手動化。
+  //
+  // 防げないもの:
+  //   - 脆弱性そのもの
+  //
+  // 採用理由:
+  //   セキュリティ設定ではなく変更管理。
+  //   更新タイミングを利用者が管理する。
+  //
+  // Source:
+  // VS Code Update Settings
   "update.mode": "manual",
 
-  // 4. データ外部送信の遮断
+
+
+  // ============================================================
+  // 5. Telemetry / External Communication
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 効果:
+  //   VS Code本体の利用統計送信を停止。
+  //
+  // 防げないもの:
+  //   - 拡張機能独自の通信
+  //   - Cursor AI通信
+  //   - Copilot等の外部通信
+  //
+  // 採用理由:
+  //   不要な診断データ送信を減らす。
+  //
+  // Source:
+  // https://code.visualstudio.com/docs/getstarted/telemetry
   "telemetry.telemetryLevel": "off",
-  "workbench.enableExperiments": false
+
+
+
+  // [VS Code / Cursor]
+  //
+  // 効果:
+  //   実験機能やA/Bテストを受け取らない。
+  //
+  // 採用理由:
+  //   挙動変化を減らし再現性を上げる。
+  //
+  "workbench.enableExperiments": false,
+
+
+
+  // [VS Code / Cursor]
+  //
+  // 効果:
+  //   package.json表示時の
+  //   npm Registry問い合わせを抑制。
+  //
+  // 採用理由:
+  //   不要な通信を減らす。
+  //
+  "npm.fetchOnlinePackageInfo": false,
+
+
+
+  // ============================================================
+  // 6. Git
+  // ============================================================
+
+  // [VS Code / Cursor]
+  //
+  // 検討:
+  //   false にすると通信制御は明確になる。
+  //
+  // 判断:
+  //   セキュリティ効果は限定的。
+  //   ブランチ状態や更新通知の利便性を優先。
+  //
+  // 採用理由:
+  //   デフォルト挙動を維持。
+  //
+  "git.autofetch": true
 }

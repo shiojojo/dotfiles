@@ -31,6 +31,7 @@ dotfiles/
 │   ├── config                 (pnpm 11 auth用 INI設定)
 │   └── config.yaml            (pnpm 11 非auth用 YAML設定)
 ├── shell/                     ← 環境変数・エイリアス定義
+│   ├── sec-python.sh          (Python/uv セキュリティ環境変数: Mac/Linux共通)
 │   ├── os-mac.sh              (macOS/zsh固有設定・履歴保護)
 │   └── os-linux.sh            (Linux/bash固有設定・履歴保護)
 ├── uv/
@@ -67,8 +68,9 @@ dotfiles/
 - trust policy no-downgrade (降格防止)
 - **`npm` / `npx` / `pnpx` / `pnpm dlx` の直接実行を PATH ラッパーで完全ブロック**
 
-#### uv / Python
+#### uv / Python (`sec-python.sh`)
 
+- `PIP_REQUIRE_VIRTUALENV=true` (グローバル Python 環境への直接インストール禁止)
 - `UV_SYSTEM_PYTHON=false` (システム Python 書き換え禁止)
 - **`pip` / `pip3` / `uvx` / `uv tool run` の直接実行を PATH ラッパーで完全ブロック**
 
@@ -78,10 +80,13 @@ dotfiles/
 - `fetch.fsckObjects=true` / `transfer.fsckObjects=true`
 - `protocol.file.allow=never`
 
-#### VS Code (時間差検疫)
+#### VS Code / Cursor (時間差検疫と自動実行の遮断)
 
-- VS Code 設定は上書きせず `vscode/settings.json` をコピペ用テンプレートとして管理。
+- 設定は上書きせず `vscode/settings.json` をコピペ用テンプレートとして管理し、両エディタに適用する。
 - ユーザー設定に手動反映した内容を `verify.sh` で厳格監査する（自動更新の無効化など）。
+- **注:** Cursor は AI 機能の利便性を優先し、初期状態で Workspace Trust が無効化されている
+  （公式: "The Cursor IDE supports the standard workspace trust feature that is disabled by default."）。
+  `settings.json` による明示的な有効化が必須。
 
 #### Homebrew / macOS / zsh (`os-mac.sh`)
 
@@ -142,28 +147,71 @@ sudo ./verify-system.sh
 
 - **ブロックログ:** `~/.local/state/harness/logs/blocked.log`
 
-## VS Code の手動設定手順
+## VS Code / Cursor の手動設定手順
 
-1. VS Code で Settings(JSON) を開く (Mac: `Cmd+Shift+P` -> `Open User Settings (JSON)`)
-2. 以下の内容をご自身の `settings.json` に追記する。
+### 1. `settings.json` の適用（両エディタ共通）
+
+1. 各エディタで Settings (JSON) を開く。
+   - VS Code: `Cmd+Shift+P` → `Open User Settings (JSON)`
+   - Cursor: `Cmd+Shift+P` → `Preferences: Open User Settings (JSON)`
+2. `vscode/settings.json` の内容を自身の設定ファイルに追記する。
 3. `./verify.sh` を実行し、すべて ✅ になることを確認する。
 
 ```json
 {
   "extensions.autoUpdate": false,
   "extensions.autoCheckUpdates": true,
+  "extensions.ignoreRecommendations": true,
   "security.workspace.trust.enabled": true,
   "security.workspace.trust.emptyWindow": false,
   "security.workspace.trust.untrustedFiles": "prompt",
+  "task.allowAutomaticTasks": "off",
   "update.mode": "manual",
   "telemetry.telemetryLevel": "off",
-  "workbench.enableExperiments": false
+  "workbench.enableExperiments": false,
+  "npm.fetchOnlinePackageInfo": false
 }
 ```
 
-> **注:** `workbench.enableExperiments: false` はMicrosoftのA/Bテストを無効化する安定性設定であり、厳密にはセキュリティ設定ではない。
+> **注:**
+>
+> - `workbench.enableExperiments: false` は Microsoft の A/B テスト配信を止める安定性設定であり、厳密にはセキュリティ設定ではない。
+> - `task.allowAutomaticTasks: "off"` は Workspace Trust と組み合わせて機能する二重防御。単体では Workspace Trust の代替にならない。
 
-## アップデート運用方針 (VS Code)
+### 2. Cursor 固有の GUI 設定（Cursor のみ・必須）
+
+Cursor 固有の AI 通信・プライバシー設定は `settings.json` では制御できない仕様のため、
+導入時に必ず以下を手動で設定する。
+
+#### Privacy Mode の有効化
+
+> 出典: Cursor 公式ドキュメント —
+> "You can enable Privacy Mode at onboarding or under Cursor Settings > General > Privacy Mode."
+
+1. 右上の歯車アイコン → `Cursor Settings` を開く。
+2. `General` → `Privacy Mode` を **Enabled** にする。
+3. 効果: コードが Cursor 社のサーバーに保存・学習データとして使用されるのを防ぐ。
+
+#### Run Mode の設定（Agent コマンド実行の制御）
+
+> 出典: Cursor 公式ドキュメント —
+> "Configure how Cursor runs tools like command execution, MCP, and file writes
+> at Settings > Cursor Settings > Agents > Run Mode."
+>
+> **公式の警告:** "Treat Auto-review as best-effort convenience, not a security boundary.
+> For strict control, use Allowlist and approve calls yourself."
+
+1. `Cursor Settings` → `Agents` → `Run Mode` を開く。
+2. **`Allowlist`** を選択する。
+   - デフォルトの `Auto-review` は公式が「セキュリティ境界ではない」と明言しているため不十分。
+   - Allowlist に列挙されていないコマンドはすべて承認ダイアログが表示される。
+3. 許可するコマンドを Allowlist に明示的に追加する（`git`、`pnpm` 等、プロジェクトに応じて判断）。
+
+> **バージョン補足:** Cursor 3.5 以前の "Ask Every Time" は廃止済み。
+> 代替は「Allowlist を空にして運用」する方法。
+> 旧 "Run in Sandbox" は現在の "Allowlist (with Sandbox)" に相当する。
+
+## アップデート運用方針 (VS Code / Cursor)
 
 - 更新作業は週1回のメンテ枠でのみ実施する。
 - 通知が出ても最低 3〜7 日は更新しない（時間差検疫）。
@@ -196,9 +244,17 @@ PNPM_CONFIG_MINIMUM_RELEASE_AGE=0 pnpm add <package-name>
 
 ### 2. インストールスクリプトの許可 (pnpm)
 
-ネイティブバイナリのビルドなど、どうしても `postinstall` スクリプトの実行が必要な信頼できるパッケージに対してのみ、プロジェクト内の `.npmrc` に以下を明記して局所的に許可します（グローバルでは許可しない）。
+ネイティブバイナリのビルドなど、どうしても `postinstall` スクリプトの実行が必要な信頼できるパッケージに対してのみ、プロジェクトの `pnpm-workspace.yaml` に以下を追記して局所的に許可します（グローバルでは許可しない）。
 
-```ini
-# .npmrc (プロジェクトルート)
-pnpm.onlyBuiltDependencies[]="<package-name>"
+```yaml
+# pnpm-workspace.yaml (プロジェクトルート)
+allowBuilds:
+  <package-name>: true
 ```
+
+> **注:** `onlyBuiltDependencies`（v10 以前）は pnpm v11 で廃止済み。
+> `.npmrc` への記載も v11 では auth/registry 設定専用となり非 auth 設定は読まれない。
+> 対話式に許可する場合は `pnpm approve-builds <package-name>` を実行すると
+> `pnpm-workspace.yaml` に自動追記される。
+>
+> 出典: https://pnpm.io/settings#allowbuilds

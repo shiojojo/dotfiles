@@ -249,22 +249,38 @@ fi
 echo "---------------------------------------------------------"
 
 # ---------------------------------------------------------
-# 4. VS Code セキュリティ設定
+# 4. VS Code / Cursor セキュリティ設定
 # ---------------------------------------------------------
-echo "[4] VS Code 環境"
+echo "[4] VS Code / Cursor 環境"
 case "$(uname -s)" in
-  Darwin) VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json" ;;
-  Linux)  VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json" ;;
-  *)      VSCODE_SETTINGS="" ;;
+  Darwin)
+    VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json"
+    CURSOR_SETTINGS="$HOME/Library/Application Support/Cursor/User/settings.json"
+    ;;
+  Linux)
+    VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
+    CURSOR_SETTINGS="$HOME/.config/Cursor/User/settings.json"
+    ;;
+  *)
+    VSCODE_SETTINGS=""
+    CURSOR_SETTINGS=""
+    ;;
 esac
 
-if [ -f "$VSCODE_SETTINGS" ]; then
-    VSCODE_JSON_VALID=0
-    if command -v jq >/dev/null 2>&1 && jq empty "$VSCODE_SETTINGS" >/dev/null 2>&1; then
-        VSCODE_JSON_VALID=1
+check_editor_settings() {
+    local editor_name="$1"
+    local settings_file="$2"
+
+    if [ ! -f "$settings_file" ]; then
+        echo "  ➖ $editor_name の settings.json が見つかりません (スキップ)"
+        return
     fi
 
-    # ブール値・文字列問わず、統一された検証関数
+    local JSON_VALID=0
+    if command -v jq >/dev/null 2>&1 && jq empty "$settings_file" >/dev/null 2>&1; then
+        JSON_VALID=1
+    fi
+
     vsc_check() {
         local label="$1"
         local key="$2"
@@ -272,37 +288,61 @@ if [ -f "$VSCODE_SETTINGS" ]; then
         local regex="$4"
         local actual
 
-        if [ "$VSCODE_JSON_VALID" -eq 1 ]; then
-            actual="$(jq -r ".[\"$key\"] // \"未設定\"" "$VSCODE_SETTINGS" 2>/dev/null || echo "未設定")"
+        if [ "$JSON_VALID" -eq 1 ]; then
+            # jq の `//` 演算子は false(ブール値) を null と同等に扱いフォールバックしてしまうため、has() を使用
+            actual="$(jq -r "if has(\"$key\") then .[\"$key\"] | tostring else \"未設定\" end" "$settings_file" 2>/dev/null || echo "未設定")"
             if [ "$actual" = "$expected" ]; then
-                echo "  ✅ $label"
+                echo "  ✅ [$editor_name] $label"
                 PASS=$((PASS + 1))
             else
-                echo "  ❌ $label"
+                echo "  ❌ [$editor_name] $label"
+                echo "       期待値: '$expected'"
+                echo "       実際値: '$actual'"
                 FAIL=$((FAIL + 1))
             fi
         else
-            if grep -Eq "$regex" "$VSCODE_SETTINGS"; then
-                echo "  ✅ $label"
+            if grep -Eq "$regex" "$settings_file"; then
+                echo "  ✅ [$editor_name] $label"
                 PASS=$((PASS + 1))
             else
-                echo "  ❌ $label"
+                echo "  ❌ [$editor_name] $label (grepによるフォールバック検証)"
                 FAIL=$((FAIL + 1))
             fi
         fi
     }
 
-    vsc_check "extensions.autoUpdate=false (時間差検疫)" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
+    # セキュリティ設定のベースライン全項目チェック
+    vsc_check "extensions.autoUpdate=false" "extensions.autoUpdate" "false" '"extensions\.autoUpdate"[[:space:]]*:[[:space:]]*false'
     vsc_check "extensions.autoCheckUpdates=true" "extensions.autoCheckUpdates" "true" '"extensions\.autoCheckUpdates"[[:space:]]*:[[:space:]]*true'
+    vsc_check "extensions.ignoreRecommendations=true" "extensions.ignoreRecommendations" "true" '"extensions\.ignoreRecommendations"[[:space:]]*:[[:space:]]*true'
+    
     vsc_check "security.workspace.trust.enabled=true" "security.workspace.trust.enabled" "true" '"security\.workspace\.trust\.enabled"[[:space:]]*:[[:space:]]*true'
     vsc_check "security.workspace.trust.emptyWindow=false" "security.workspace.trust.emptyWindow" "false" '"security\.workspace\.trust\.emptyWindow"[[:space:]]*:[[:space:]]*false'
     vsc_check "security.workspace.trust.untrustedFiles=prompt" "security.workspace.trust.untrustedFiles" "prompt" '"security\.workspace\.trust\.untrustedFiles"[[:space:]]*:[[:space:]]*"prompt"'
+    vsc_check "security.workspace.trust.startupPrompt=once" "security.workspace.trust.startupPrompt" "once" '"security\.workspace\.trust\.startupPrompt"[[:space:]]*:[[:space:]]*"once"'
+    
+    vsc_check "task.allowAutomaticTasks=off" "task.allowAutomaticTasks" "off" '"task\.allowAutomaticTasks"[[:space:]]*:[[:space:]]*"off"'
     vsc_check "update.mode=manual" "update.mode" "manual" '"update\.mode"[[:space:]]*:[[:space:]]*"manual"'
+    
     vsc_check "telemetry.telemetryLevel=off" "telemetry.telemetryLevel" "off" '"telemetry\.telemetryLevel"[[:space:]]*:[[:space:]]*"off"'
     vsc_check "workbench.enableExperiments=false" "workbench.enableExperiments" "false" '"workbench\.enableExperiments"[[:space:]]*:[[:space:]]*false'
-else
-    echo "  ❌ VS Code の settings.json が見つかりません"
-    FAIL=$((FAIL + 1))
+    vsc_check "npm.fetchOnlinePackageInfo=false" "npm.fetchOnlinePackageInfo" "false" '"npm\.fetchOnlinePackageInfo"[[:space:]]*:[[:space:]]*false'
+    
+    vsc_check "git.autofetch=true" "git.autofetch" "true" '"git\.autofetch"[[:space:]]*:[[:space:]]*true'
+}
+
+FOUND_EDITOR=0
+if [ -n "$VSCODE_SETTINGS" ] && [ -f "$VSCODE_SETTINGS" ]; then
+    check_editor_settings "VS Code" "$VSCODE_SETTINGS"
+    FOUND_EDITOR=1
+fi
+if [ -n "$CURSOR_SETTINGS" ] && [ -f "$CURSOR_SETTINGS" ]; then
+    check_editor_settings "Cursor" "$CURSOR_SETTINGS"
+    FOUND_EDITOR=1
+fi
+
+if [ "$FOUND_EDITOR" -eq 0 ]; then
+    echo "  ⚠️ VS Code および Cursor の設定ファイル (settings.json) が見つかりません。"
 fi
 echo "---------------------------------------------------------"
 
@@ -316,7 +356,7 @@ case "$(uname -s)" in
   *)      RC_FILE="" ;;
 esac
 
-if [ -n "$RC_FILE" ] && [ -f "$RC_FILE" ] && grep -qF "# === Dotfiles Harness Settings ===" "$RC_FILE"; then
+if [ -n "$RC_FILE" ] && [ -f "$RC_FILE" ] && grep -qF "# === BEGIN Dotfiles Harness Settings ===" "$RC_FILE"; then
     echo "  ✅ $RC_FILE にハーネス設定の読み込みが存在します"
     PASS=$((PASS + 1))
 else
